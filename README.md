@@ -22,7 +22,7 @@ pip install lightning
 
 ### ⭐IMPORTANT 
 
-- currently, you have to fix line 135 of '_message_api.py' (I don't know why the bug occurs)
+- currently, you have to fix line 135 of '_message_api.py' in viser (I don't know why the bug occurs)
 
 - Original
 ```python
