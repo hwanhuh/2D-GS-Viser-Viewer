@@ -12,6 +12,7 @@ A significant portion of the viewer is based on [Original 2D GS Github](https://
 
 - You have to follow original installation instructions in [2D GS](https://github.com/hbb1/2d-gaussian-splatting) 
 - then add all the files in this project into the original project
+- you should replace the original './gaussian_renderer/__init__.py' to the './gaussian_renderer/__init__.py' on this project
 
 ```bash
 pip install viser
