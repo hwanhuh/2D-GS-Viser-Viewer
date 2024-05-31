@@ -307,7 +307,7 @@ class Viewer:
             if self.show_cameras is True:
                 self.add_cameras_to_scene(server)
 
-            UpDirectionFolder(self, server)
+            # UpDirectionFolder(self, server)
 
             go_to_scene_center = server.add_gui_button(
                 "Go to scene center",
