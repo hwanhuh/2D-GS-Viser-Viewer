@@ -22,7 +22,7 @@ pip install lightning
 
 ### ⭐IMPORTANT 
 
-- currently, you have to fix line 135 of '_message_api.py' in viser (I don't know why the bug occurs)
+- Also, you have to fix line 135 of '_message_api.py' in viser (I don't know why the bug occurs)
 
 - Original
 ```python
@@ -63,5 +63,6 @@ Keyboard
 
 
 ## Acknowledgements
-Currently, the viewer only supports just viewing
+Currently, the viewer only supports JUST viewing.
+
 This project is built upon [Original 2D GS Github](https://github.com/hbb1/2d-gaussian-splatting), [Viser](https://github.com/nerfstudio-project/viser) and [Gaussian Splatting Pytorch Lightning](https://github.com/yzslab/gaussian-splatting-lightning).
