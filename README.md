@@ -18,7 +18,7 @@ A significant portion of this project is built upon several existing works to pr
 - 2024/06/03
     - General Features
         - Supports various render types including ***Normal / Depth / Depth2Normal***
-        - You can also directly compare two different types of rendering: *e.g.,* normal vs depth-to-normal
+        - Direct comparison between different render types, *e.g.,* normal vs depth-to-normal
         - Crop Box Region
         - Pointcloud visualization
     - Editing Features
@@ -30,9 +30,9 @@ A significant portion of this project is built upon several existing works to pr
 
 ## Installation
 
-- You have to follow the original installation instructions in [2D GS](https://github.com/hbb1/2d-gaussian-splatting) 
-- then add all the files in this project into the original project
-- I only checked the viewer in Ubuntu20.04
+- Follow the original installation instructions from 2D GS, then add all files from this project to the original project directory. 
+(*i.e.,* 'viewer.py' is in '~/2d-gaussian-splatting/viewer.py')
+- Tested on Ubuntu 20.04.
 
 ```bash
 pip install viser
@@ -83,10 +83,10 @@ python viewer.py <path to pre-trained model> <or direct path to the ply file>
 python viewer.py <path to pre-trained model> <or direct path to the ply file> --enable_transform
 ```
 
-Keyboard 
-- q/e for up & down
-- w/a/s/d for moving
-- mouse wheel for zoom in/out
+### Control 
+- **'q/e'** for up & down
+- **'w/a/s/d'** for moving
+- Mouse wheel for zoom in/out
 
 
 ## Acknowledgements
