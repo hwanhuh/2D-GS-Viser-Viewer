@@ -10,17 +10,26 @@ A significant portion of the viewer is based on [Original 2D GS Github](https://
 
 
 ## ⭐New Features  
-![visualization](assets/viser_various_renders.gif)
-![visualization](assets/viser_crop_box.gif)
-- 2024/06/03: Supports various render types including Normal/Depth/Depth2Normal & Crop Region 
-- 2024/05/31: code release
+- 2024/06/03
+    - General Features
+        - Supports various render types including ***Normal / Depth / Depth2Normal***
+        - Crop Box
+        - Pointcloud visualization
+    - Edit / Delete and Save: I recommend using add pointcloud!
+    - Transform
+- 2024/05/31
+    - code release
+ 
+| General | Edit | Transform |
+| --- | --- | --- |
+| ![visualization](assets/viser_general_opt.gif) | ![visualization](assets/viser_edit_opt.gif) | ![visualization](assets/viser_transform_opt.gif) |
+
 
 
 ## Installation
 
 - You have to follow the original installation instructions in [2D GS](https://github.com/hbb1/2d-gaussian-splatting) 
 - then add all the files in this project into the original project
-- you should replace the original './gaussian_renderer/__init__.py' to the './gaussian_renderer/__init__.py' on this project
 
 ```bash
 pip install viser
@@ -62,9 +71,15 @@ pip install lightning
 
 
 ## Usage
+- common use
 ```bash
-python viewer.py <path to pre-trained model>
+python viewer.py <path to pre-trained model> <or direct path to the ply file>
 ```
+- for transform the scene 
+```bash
+python viewer.py <path to pre-trained model> <or direct path to the ply file>
+```
+
 Keyboard 
 - q/e for up & down
 - w/a/s/d for moving
