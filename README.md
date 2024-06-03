@@ -8,6 +8,14 @@ A significant portion of the viewer is based on [Original 2D GS Github](https://
 
 ![visualization](assets/viser_capture.gif)
 
+
+## ⭐New Features  
+![visualization](assets/viser_various_renders.gif)
+![visualization](assets/viser_crop_box.gif)
+- 2024/06/03: Supports various render types including Normal/Depth/Depth2Normal & Crop Region 
+- 2024/05/31: code release
+
+
 ## Installation
 
 - You have to follow the original installation instructions in [2D GS](https://github.com/hbb1/2d-gaussian-splatting) 
@@ -19,13 +27,6 @@ pip install viser
 pip install splines  
 pip install lightning
 ```
-
-### ⭐New Features  
-![visualization](assets/viser_various_renders.gif)
-![visualization](assets/viser_crop_box.gif)
-- 2024/06/03: Supports various render types including Normal/Depth/Depth2Normal & Crop Region 
-- 2024/05/31: code release
-
 ### ⭐IMPORTANT 
 
 - Also, you have to fix line 135 of '_message_api.py' in viser (I don't know why the bug occurs)
@@ -55,6 +56,8 @@ pip install lightning
             return cast(TVector, vector)
 
 ```
+
+
 
 
 
