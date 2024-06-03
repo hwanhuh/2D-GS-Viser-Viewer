@@ -86,13 +86,16 @@ class ClientThread(threading.Thread):
                 height=torch.tensor([image_height], dtype=torch.int),
                 appearance_id=torch.tensor([appearance_id[0]], dtype=torch.int),
                 normalized_appearance_id=torch.tensor([appearance_id[1]], dtype=torch.float),
-                time=torch.tensor([self.viewer.time_slider.value], dtype=torch.float),
+                time=torch.tensor([0], dtype=torch.float),
                 distortion_params=None,
                 camera_type=torch.tensor([0], dtype=torch.int),
             )[0].to_device(self.viewer.device)
 
             with torch.no_grad():
-                image = self.renderer.get_outputs(camera, scaling_modifier=self.viewer.scaling_modifier.value)
+                # import pdb; pdb.set_trace()
+                valid_range = ((self.viewer.x_min.value, self.viewer.x_max.value), (self.viewer.y_min.value, self.viewer.y_max.value), (self.viewer.z_min.value, self.viewer.z_max.value))
+                image = self.renderer.get_outputs(camera, scaling_modifier=self.viewer.scaling_modifier.value, valid_range=valid_range)
+                # image = self.renderer.get_outputs(camera, scaling_modifier=self.viewer.scaling_modifier.value)
                 image = torch.clamp(image, max=1.)
                 image = torch.permute(image, (1, 2, 0))
                 self.client.set_background_image(
