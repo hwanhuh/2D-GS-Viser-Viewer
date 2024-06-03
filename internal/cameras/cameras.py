@@ -33,6 +33,12 @@ class Camera:
     full_projection: Tensor
     camera_center: Tensor
 
+    world_view_transform: Tensor 
+    image_width: Tensor 
+    image_height: Tensor
+    FoVx: Tensor 
+    FoVy: Tensor
+
     def to_device(self, device):
         for field in Camera.__dataclass_fields__:
             value = getattr(self, field)
@@ -158,4 +164,10 @@ class Cameras:
             projection=self.projection[index],
             full_projection=self.full_projection[index],
             camera_center=self.camera_center[index],
+
+            world_view_transform= self.world_to_camera[index],
+            image_width= self.width[index],
+            image_height= self.height[index],
+            FoVx=self.fov_x[index],
+            FoVy=self.fov_y[index],
         )
