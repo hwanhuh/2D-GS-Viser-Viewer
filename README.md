@@ -78,7 +78,7 @@ python viewer.py <path to pre-trained model> <or direct path to the ply file>
 ```
 - for transform the scene 
 ```bash
-python viewer.py <path to pre-trained model> <or direct path to the ply file>
+python viewer.py <path to pre-trained model> <or direct path to the ply file> --enable_transform
 ```
 
 Keyboard 
