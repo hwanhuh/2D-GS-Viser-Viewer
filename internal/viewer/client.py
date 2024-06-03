@@ -92,10 +92,17 @@ class ClientThread(threading.Thread):
             )[0].to_device(self.viewer.device)
 
             with torch.no_grad():
-                # import pdb; pdb.set_trace()
-                valid_range = ((self.viewer.x_min.value, self.viewer.x_max.value), (self.viewer.y_min.value, self.viewer.y_max.value), (self.viewer.z_min.value, self.viewer.z_max.value))
-                image = self.renderer.get_outputs(camera, scaling_modifier=self.viewer.scaling_modifier.value, valid_range=valid_range)
-                # image = self.renderer.get_outputs(camera, scaling_modifier=self.viewer.scaling_modifier.value)
+                valid_range = None
+                if self.viewer.enable_crop.value:
+                    valid_range = ((self.viewer.x_min.value, self.viewer.x_max.value), (self.viewer.y_min.value, self.viewer.y_max.value), (self.viewer.z_min.value, self.viewer.z_max.value))
+                image = self.renderer.get_outputs(camera, 
+                                                  scaling_modifier = self.viewer.scaling_modifier.value, 
+                                                  valid_range = valid_range, 
+                                                  split = self.viewer.enable_split.value, 
+                                                  slider = self.viewer.mode_slider.value,
+                                                  show_ptc = self.viewer.enable_ptc.value,
+                                                  point_size = self.viewer.point_size.value,
+                                                  )
                 image = torch.clamp(image, max=1.)
                 image = torch.permute(image, (1, 2, 0))
                 self.client.set_background_image(
