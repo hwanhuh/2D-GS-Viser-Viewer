@@ -1,12 +1,12 @@
 # Simple Viser Viewer for 2D Gaussian Splatting for Geometrically Accurate Radiance Fields
 
-|[2D GS Project page](https://surfsplatting.github.io/) | [Paper](https://arxiv.org/pdf/2403.17888) | [Original Github](https://github.com/hbb1/2d-gaussian-splatting) |<br>
+[2D GS Project page](https://surfsplatting.github.io/) | [Paper](https://arxiv.org/pdf/2403.17888) | [Original Github](https://github.com/hbb1/2d-gaussian-splatting) <br>
 
 This repo contains the *unofficial* viewer for the "2D Gaussian Splatting for Geometrically Accurate Radiance Fields". 
 
 A significant portion of the viewer is based on [Original 2D GS Github](https://github.com/hbb1/2d-gaussian-splatting), [Viser](https://github.com/nerfstudio-project/viser) and [Gaussian Splatting Pytorch Lightning](https://github.com/yzslab/gaussian-splatting-lightning).
 
-| Preview | General |
+| Preview | Render |
 | --- | --- |
 |![visualization](assets/viser_capture.gif)|![visualization](assets/viser_general_opt.gif) | 
 
@@ -19,10 +19,11 @@ A significant portion of the viewer is based on [Original 2D GS Github](https://
 - 2024/06/03
     - General Features
         - Supports various render types including ***Normal / Depth / Depth2Normal***
-        - Crop Box
+        - You can also directly compare two different types of rendering: *e.g.,* normal vs depth-to-normal
+        - Crop Box Region
         - Pointcloud visualization
-    - Edit / Delete and Save: I recommend using add pointcloud!
-    - Transform
+    - Edit / Delete and Save: I recommend using 'Add pointcloud'!
+    - Rigid Transform 
 - 2024/05/31
     - code release
 
