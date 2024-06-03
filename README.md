@@ -3,8 +3,7 @@
 [2D GS Project page](https://surfsplatting.github.io/) | [Paper](https://arxiv.org/pdf/2403.17888) | [Original Github](https://github.com/hbb1/2d-gaussian-splatting) <br>
 
 This repo contains the *unofficial* viewer for the "2D Gaussian Splatting for Geometrically Accurate Radiance Fields". 
-
-A significant portion of the viewer is based on [Original 2D GS Github](https://github.com/hbb1/2d-gaussian-splatting), [Viser](https://github.com/nerfstudio-project/viser) and [Gaussian Splatting Pytorch Lightning](https://github.com/yzslab/gaussian-splatting-lightning).
+A significant portion of this project is built upon several existing works to provide enhanced visualization and editing capabilities for 2D Gaussian Splatting data.
 
 | Preview | Render |
 | --- | --- |
@@ -22,8 +21,10 @@ A significant portion of the viewer is based on [Original 2D GS Github](https://
         - You can also directly compare two different types of rendering: *e.g.,* normal vs depth-to-normal
         - Crop Box Region
         - Pointcloud visualization
-    - Edit / Delete and Save: I recommend using 'Add pointcloud'!
-    - Rigid Transform 
+    - Editing Features
+        - Edit, delete and save point clouds (Recommended with: 'Add pointcloud')
+    - Transform Features
+        - Rigid Transform 
 - 2024/05/31
     - code release
 
@@ -31,6 +32,7 @@ A significant portion of the viewer is based on [Original 2D GS Github](https://
 
 - You have to follow the original installation instructions in [2D GS](https://github.com/hbb1/2d-gaussian-splatting) 
 - then add all the files in this project into the original project
+- I only checked the viewer in Ubuntu20.04
 
 ```bash
 pip install viser
@@ -39,7 +41,7 @@ pip install lightning
 ```
 ### ⭐IMPORTANT 
 
-- Also, you have to fix line 135 of '_message_api.py' in viser (I don't know why the bug occurs)
+- Also, you have to fix line 135 of '_message_api.py' (or '_scene_api.py') in viser (I don't know why the bug occurs)
 
 - Original
 ```python
@@ -57,9 +59,9 @@ pip install lightning
         if isinstance(vector, tuple): return cast(TVector, vector)
         else:
             if vector.__class__.__name__ == 'RollPitchYaw':
-            x = vector.roll 
-            y = vector.pitch 
-            z = vector.yaw
+                x = vector.roll 
+                y = vector.pitch 
+                z = vector.yaw
             return cast(TVector, (x, y, z))
         else:
             vector = tuple(vector)
@@ -88,6 +90,9 @@ Keyboard
 
 
 ## Acknowledgements
-This project is built upon [Original 2D GS Github](https://github.com/hbb1/2d-gaussian-splatting), [Viser](https://github.com/nerfstudio-project/viser) and [Gaussian Splatting Pytorch Lightning](https://github.com/yzslab/gaussian-splatting-lightning).
+This project is built upon the following works
+- [Original 2D GS Github](https://github.com/hbb1/2d-gaussian-splatting)
+- [Viser](https://github.com/nerfstudio-project/viser)
+- [Gaussian Splatting Pytorch Lightning](https://github.com/yzslab/gaussian-splatting-lightning).
 
-Realted Blog Post: [link](https://velog.io/@gjghks950/Review-2D-Gaussian-Splatting-for-Geometrically-Accurate-Radiance-Fields-Viewer-%EA%B5%AC%ED%98%84-%EC%86%8C%EA%B0%9C)
+Realted Blog Post: [Review of 2D Gaussian Splatting (Korean)](https://velog.io/@gjghks950/Review-2D-Gaussian-Splatting-for-Geometrically-Accurate-Radiance-Fields-Viewer-%EA%B5%AC%ED%98%84-%EC%86%8C%EA%B0%9C)
