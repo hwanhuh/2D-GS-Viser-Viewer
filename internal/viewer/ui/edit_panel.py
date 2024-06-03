@@ -41,14 +41,13 @@ class EditPanel:
             self.point_size = server.add_gui_number(
                 "Point Size",
                 min=0.,
-                initial_value=0.01,
+                initial_value=0.001,
             )
             self.point_sparsify = server.add_gui_number(
                 "Point Sparsify",
                 min=1,
                 initial_value=10,
             )
-
             self.pcd = None
 
             @self.show_point_cloud_checkbox.on_update
@@ -194,33 +193,10 @@ class EditPanel:
                                 except:
                                     traceback.print_exc()
 
-                                if self.viewer.checkpoint is None:
-                                    # save ply
-                                    ply_save_path = os.path.join(output_directory, "{}.ply".format(name))
-                                    self.viewer.gaussian_model.to_ply_structure().save_to_ply(ply_save_path)
-                                    message_text = "Saved to {}".format(ply_save_path)
-                                else:
-                                    # save as a checkpoint if viewer started from a checkpoint
-                                    checkpoint_save_path = os.path.join(output_directory, "{}.ckpt".format(name))
-                                    checkpoint = self.viewer.checkpoint
-                                    # update state dict of the checkpoint
-                                    state_dict_value = self.viewer.gaussian_model.to_parameter_structure()
-                                    for name_in_dict, name_in_dataclass in [
-                                        ("xyz", "xyz"),
-                                        ("features_dc", "features_dc"),
-                                        ("features_rest", "features_rest"),
-                                        ("scaling", "scales"),
-                                        ("rotation", "rotations"),
-                                        ("opacity", "opacities"),
-                                        ("features_extra", "real_features_extra"),
-                                    ]:
-                                        dict_key = "gaussian_model._{}".format(name_in_dict)
-                                        if dict_key not in checkpoint["state_dict"]:
-                                            print(f"WARNING: `{dict_key}` not found in original checkpoint")
-                                        checkpoint["state_dict"][dict_key] = getattr(state_dict_value, name_in_dataclass)
-                                    # save
-                                    torch.save(checkpoint, checkpoint_save_path)
-                                    message_text = "Saved to {}".format(checkpoint_save_path)
+                                # save ply
+                                ply_save_path = os.path.join(output_directory, "{}.ply".format(name))
+                                self.viewer.gaussian_model.save_ply(ply_save_path)
+                                message_text = "Saved to {}".format(ply_save_path)
                             else:
                                 message_text = "Invalid name"
                         except:
@@ -293,7 +269,7 @@ class EditPanel:
         colors[selected_gaussians_indices] = 255 - torch.tensor(self.point_cloud_color.value).to(colors)
 
         point_sparsify = int(self.point_sparsify.value)
-        self.show_point_cloud(xyz[::point_sparsify].cpu().numpy(), colors[::point_sparsify].cpu().numpy())
+        self.show_point_cloud(xyz[::point_sparsify].cpu().detach().numpy(), colors[::point_sparsify].cpu().detach().numpy())
 
     def remove_point_cloud(self):
         if self.pcd is not None:

@@ -42,15 +42,20 @@ class TransformPanel:
         self.model_show_transform_control_checkboxes = []
         self.model_t_xyz_text_handle = []
         self.model_r_xyz_text_handle = []
+        self.prev_t_xyz = (0., 0., 0.)
+        self.prev_r_xyz = (0., 0., 0.)
 
         self.pose_control_size = server.add_gui_slider(
             "Pose Control Size",
             min=0.,
             max=10.,
             step=0.01,
-            initial_value=0.4,
+            initial_value=1.0,
         )
         self.pose_control_size.on_update(self._update_pose_control_size)
+
+        # for transforming, backup original position & rotations 
+        self.viewer.gaussian_model.backup()
 
         # create gui folder for each model
         for i in range(n_models):
@@ -90,9 +95,7 @@ class TransformPanel:
                 r_xyz_text_handle = server.add_gui_vector3(
                     "r_xyz",
                     initial_value=(0., 0., 0.),
-                    # min=(-180, -180, -180),
-                    # max=(180, 180, 180),
-                    step=0.1,
+                    step=0.01,
                 )
                 self._make_r_xyz_text_callback(i, r_xyz_text_handle)
                 self.model_r_xyz_text_handle.append(r_xyz_text_handle)
@@ -112,8 +115,8 @@ class TransformPanel:
         if idx in self.model_transform_controls:
             self.transform_control_no_handle_update = True
             try:
-                    self.model_transform_controls[idx].wxyz = wxyz
-                    self.model_transform_controls[idx].position = position
+                self.model_transform_controls[idx].wxyz = wxyz
+                self.model_transform_controls[idx].position = position
             finally:
                 self.transform_control_no_handle_update = False
 
