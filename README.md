@@ -1,12 +1,18 @@
 # Simple Viser Viewer for 2D Gaussian Splatting for Geometrically Accurate Radiance Fields
 
-[Project page](https://surfsplatting.github.io/) | [Paper](https://arxiv.org/pdf/2403.17888) | [Original Github](https://github.com/hbb1/2d-gaussian-splatting) |<br>
+|[2D GS Project page](https://surfsplatting.github.io/) | [Paper](https://arxiv.org/pdf/2403.17888) | [Original Github](https://github.com/hbb1/2d-gaussian-splatting) |<br>
 
 This repo contains the *unofficial* viewer for the "2D Gaussian Splatting for Geometrically Accurate Radiance Fields". 
 
 A significant portion of the viewer is based on [Original 2D GS Github](https://github.com/hbb1/2d-gaussian-splatting), [Viser](https://github.com/nerfstudio-project/viser) and [Gaussian Splatting Pytorch Lightning](https://github.com/yzslab/gaussian-splatting-lightning).
 
-![visualization](assets/viser_capture.gif)
+| Preview | General |
+| --- | --- |
+|![visualization](assets/viser_capture.gif)|![visualization](assets/viser_general_opt.gif) | 
+
+|  Edit  | Transform |
+| --- | --- |
+| ![visualization](assets/viser_edit_opt.gif) | ![visualization](assets/viser_transform_opt.gif) |
 
 
 ## ⭐New Features  
@@ -19,12 +25,6 @@ A significant portion of the viewer is based on [Original 2D GS Github](https://
     - Transform
 - 2024/05/31
     - code release
- 
-| General | Edit | Transform |
-| --- | --- | --- |
-| ![visualization](assets/viser_general_opt.gif) | ![visualization](assets/viser_edit_opt.gif) | ![visualization](assets/viser_transform_opt.gif) |
-
-
 
 ## Installation
 
