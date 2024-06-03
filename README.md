@@ -10,7 +10,7 @@ A significant portion of the viewer is based on [Original 2D GS Github](https://
 
 ## Installation
 
-- You have to follow original installation instructions in [2D GS](https://github.com/hbb1/2d-gaussian-splatting) 
+- You have to follow the original installation instructions in [2D GS](https://github.com/hbb1/2d-gaussian-splatting) 
 - then add all the files in this project into the original project
 - you should replace the original './gaussian_renderer/__init__.py' to the './gaussian_renderer/__init__.py' on this project
 
@@ -19,6 +19,12 @@ pip install viser
 pip install splines  
 pip install lightning
 ```
+
+### ⭐New Features  
+![visualization](assets/viser_various_renders.gif)
+![visualization](assets/viser_crop_box.gif)
+- 2024/06/03: Supports various render types including Normal/Depth/Depth2Normal & Crop Region 
+- 2024/05/31: code release
 
 ### ⭐IMPORTANT 
 
@@ -63,6 +69,4 @@ Keyboard
 
 
 ## Acknowledgements
-Currently, the viewer only supports JUST viewing.
-
 This project is built upon [Original 2D GS Github](https://github.com/hbb1/2d-gaussian-splatting), [Viser](https://github.com/nerfstudio-project/viser) and [Gaussian Splatting Pytorch Lightning](https://github.com/yzslab/gaussian-splatting-lightning).
