@@ -28,19 +28,22 @@ class ViewerRenderer:
             gaussian_model,
             pipe,
             background_color,
+            render_type = "render",
     ):
         super().__init__()
         self.gaussian_model = gaussian_model
         self.pipe = pipe
         self.background_color = background_color
+        self.render_type = render_type
 
-    def get_outputs(self, camera, scaling_modifier: float = 1.):
+    def get_outputs(self, camera, scaling_modifier: float=1., valid_range=None):
         return render_viewer(camera, 
                     self.gaussian_model,
                     self.pipe,
                     self.background_color,
-                    scaling_modifier
-                    )["render"]
+                    scaling_modifier, 
+                    valid_range=valid_range
+                    )[self.render_type]
 
 class Viewer:
     def __init__(
@@ -65,6 +68,17 @@ class Viewer:
             iterations: int=30000,
     ):
         self.device = torch.device("cuda")
+
+        self.render_type_name = {
+            "RGB": 'render', 
+            "Alpha": 'rend_alpha', 
+            "Normal": 'rend_normal', 
+            "Distortion": 'rend_dist', 
+            "Depth": 'surf_depth',
+            "Depth2Normal": 'surf_normal',
+            "Normal / DepthNormal": 'normal_comp'
+
+        }
 
         self.model_paths = model_paths[0]
         self.host = host
@@ -274,6 +288,11 @@ class Viewer:
                     initial_value=60,
                 )
 
+                self.render_type = server.add_gui_dropdown(
+                    "Render Type", ("RGB", "Alpha", "Normal", "Distortion", "Depth", "Depth2Normal", "Normal / DepthNormal")
+                )
+                self.render_type.on_update(self._handle_render_type_updated)
+
             with server.add_gui_folder("Model"):
                 self.scaling_modifier = server.add_gui_slider(
                     "Scaling Modifier",
@@ -294,14 +313,55 @@ class Viewer:
                     )
                     self.active_sh_degree_slider.on_update(self._handle_activate_sh_degree_slider_updated)
 
-                self.time_slider = server.add_gui_slider(
-                    "Time",
-                    min=0.,
-                    max=1.,
-                    step=0.01,
-                    initial_value=0.,
+            with server.add_gui_folder("Valid Box"):
+                self.x_min = server.add_gui_slider(
+                    "x_min",
+                    min=-10.,
+                    max=0.,
+                    step=0.1,
+                    initial_value=-3.,
                 )
-                self.time_slider.on_update(self._handle_option_updated)
+                self.x_max = server.add_gui_slider(
+                    "x_max",
+                    min=0.,
+                    max=10.,
+                    step=0.1,
+                    initial_value=3.,
+                )
+                self.y_min = server.add_gui_slider(
+                    "y_min",
+                    min=-10.,
+                    max=0.,
+                    step=0.1,
+                    initial_value=-3.,
+                )
+                self.y_max = server.add_gui_slider(
+                    "y_max",
+                    min=0.,
+                    max=10.,
+                    step=0.1,
+                    initial_value=3.,
+                )
+                self.z_min = server.add_gui_slider(
+                    "z_min",
+                    min=-10.,
+                    max=0.,
+                    step=0.1,
+                    initial_value=-3.,
+                )
+                self.z_max = server.add_gui_slider(
+                    "z_max",
+                    min=0.,
+                    max=10.,
+                    step=0.1,
+                    initial_value=3.,
+                )
+                self.x_min.on_update(self._handle_option_updated)
+                self.x_max.on_update(self._handle_option_updated)
+                self.y_min.on_update(self._handle_option_updated)
+                self.y_max.on_update(self._handle_option_updated)
+                self.z_min.on_update(self._handle_option_updated)
+                self.z_max.on_update(self._handle_option_updated)
 
             # add cameras
             if self.show_cameras is True:
@@ -348,6 +408,10 @@ class Viewer:
         if block is True:
             while True:
                 time.sleep(999)
+
+    def _handle_render_type_updated(self, _):
+        self.viewer_renderer.render_type = self.render_type_name[self.render_type.value]
+        self._handle_option_updated(_)
 
     def _handle_activate_sh_degree_slider_updated(self, _):
         self.viewer_renderer.gaussian_model.active_sh_degree = self.active_sh_degree_slider.value
