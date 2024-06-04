@@ -35,7 +35,7 @@ A significant portion of this project is built upon several existing works to pr
 - Tested on Ubuntu 20.04.
 
 ```bash
-pip install viser
+pip install viser==0.1.32
 pip install splines  
 pip install lightning
 ```
