@@ -29,7 +29,7 @@ class TransformPanel:
             self,
             server: viser.ViserServer,
             viewer,
-            n_models: int,
+            i=0,
     ):
         self.server = server
         self.viewer = viewer
@@ -45,60 +45,74 @@ class TransformPanel:
         self.prev_t_xyz = (0., 0., 0.)
         self.prev_r_xyz = (0., 0., 0.)
 
-        self.pose_control_size = server.add_gui_slider(
-            "Pose Control Size",
-            min=0.,
-            max=10.,
-            step=0.01,
-            initial_value=1.0,
-        )
-        self.pose_control_size.on_update(self._update_pose_control_size)
-
         # for transforming, backup original position & rotations 
         self.viewer.gaussian_model.backup()
 
         # create gui folder for each model
-        for i in range(n_models):
-            with server.add_gui_folder("Model {} Transform".format(i)):
-                # model size control
-                size_slider = server.add_gui_number(
-                    "Size",
-                    min=0.,
-                    # max=5.,
-                    step=0.01,
-                    initial_value=1.,
-                )
-                self._make_size_slider_callback(i, size_slider)
-                self.model_size_sliders.append(size_slider)
+        
+        with server.add_gui_folder("Model Transform"):
+            model_show_transform_control_checkbox = server.add_gui_checkbox(
+                "use Transform",
+                initial_value=False,
+            )
+            self._make_show_transform_control_checkbox_callback(i, model_show_transform_control_checkbox)
+            self.model_show_transform_control_checkboxes.append(model_show_transform_control_checkbox)
 
-                # model pose control
-                self.model_poses.append(ModelPose(
-                    np.asarray([1., 0., 0., 0.]),
-                    np.zeros((3,)),
-                ))
-                model_show_transform_control_checkbox = server.add_gui_checkbox(
-                    "Pose Control",
-                    initial_value=False,
-                )
-                self._make_show_transform_control_checkbox_callback(i, model_show_transform_control_checkbox)
-                self.model_show_transform_control_checkboxes.append(model_show_transform_control_checkbox)
+            self.pose_control_size = server.add_gui_slider(
+                "Control Mode",
+                min=0.,
+                max=10.,
+                step=0.01,
+                initial_value=1.0,
+            )
+            self.pose_control_size.on_update(self._update_pose_control_size)
 
-                # add text input (synchronize with model pose control) that control model pose more precisely
-                t_xyz_text_handle = server.add_gui_vector3(
-                    "t_xyz",
-                    initial_value=(0., 0., 0.),
-                    step=0.01,
-                )
-                self._make_t_xyz_text_callback(i, t_xyz_text_handle)
-                self.model_t_xyz_text_handle.append(t_xyz_text_handle)
+            # model size control
+            size_slider = server.add_gui_number(
+                "Splat Size",
+                min=0.,
+                step=0.01,
+                initial_value=1.,
+            )
+            self._make_size_slider_callback(i, size_slider)
+            self.model_size_sliders.append(size_slider)
 
-                r_xyz_text_handle = server.add_gui_vector3(
-                    "r_xyz",
-                    initial_value=(0., 0., 0.),
-                    step=0.01,
-                )
-                self._make_r_xyz_text_callback(i, r_xyz_text_handle)
-                self.model_r_xyz_text_handle.append(r_xyz_text_handle)
+            # model pose control
+            self.model_poses.append(ModelPose(
+                np.asarray([1., 0., 0., 0.]),
+                np.zeros((3,)),
+            ))
+            
+            # add text input (synchronize with model pose control) that control model pose more precisely
+            t_xyz_text_handle = server.add_gui_vector3(
+                "Translation",
+                initial_value=(0., 0., 0.),
+                step=0.01,
+            )
+            self._make_t_xyz_text_callback(i, t_xyz_text_handle)
+            self.model_t_xyz_text_handle.append(t_xyz_text_handle)
+
+            r_xyz_text_handle = server.add_gui_vector3(
+                "Rotation",
+                initial_value=(0., 0., 0.),
+                step=0.01,
+            )
+            self._make_r_xyz_text_callback(i, r_xyz_text_handle)
+            self.model_r_xyz_text_handle.append(r_xyz_text_handle)
+
+            set_to_default = server.add_gui_button("Set to default")
+            @set_to_default.on_click
+            def _(event: viser.GuiEvent) -> None:
+                if model_show_transform_control_checkbox.value:
+                    assert event.client is not None
+                    self.viewer.gaussian_model.backup() # set current value as a defalt 
+                    self.viewer.camera_center = self.viewer.camera_center + np.array(t_xyz_text_handle.value)
+                    self.model_transform_controls[i].remove()
+                    del self.model_transform_controls[i]
+                    self.model_poses[i] = ModelPose(np.asarray([1., 0., 0., 0.]), np.zeros((3,)))
+                    t_xyz_text_handle.value = (0., 0., 0.)
+                    r_xyz_text_handle.value = (0., 0., 0.)
+                    self._show_model_transform_handle(i)
 
     def _make_size_slider_callback(
             self,

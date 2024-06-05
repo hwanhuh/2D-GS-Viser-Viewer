@@ -28,7 +28,7 @@ class EditPanel:
         server = self.server
         with self.server.add_gui_folder("Point Cloud"):
             self.show_point_cloud_checkbox = server.add_gui_checkbox(
-                "Show Point Cloud",
+                "use Edit",
                 initial_value=False,
             )
             self.point_cloud_color = server.add_gui_vector3(
@@ -36,17 +36,17 @@ class EditPanel:
                 min=(0, 0, 0),
                 max=(255, 255, 255),
                 step=1,
-                initial_value=(0, 255, 255),
+                initial_value=(0, 0, 255),
             )
             self.point_size = server.add_gui_number(
                 "Point Size",
-                min=0.,
-                initial_value=0.001,
+                min=0.001,
+                initial_value=0.005,
             )
             self.point_sparsify = server.add_gui_number(
-                "Point Sparsify",
+                "Point Sparsity",
                 min=1,
-                initial_value=10,
+                initial_value=3,
             )
             self.pcd = None
 
