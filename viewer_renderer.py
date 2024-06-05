@@ -145,11 +145,13 @@ def render_viewer(viewpoint_camera,
     surf_normal = surf_normal * (render_alpha).detach()
 
     surf_depth /= surf_depth.max()
-
+    render_normal = torch.nn.functional.normalize(render_normal, dim=0) * 0.5 + 0.5
+    surf_normal = surf_normal * 0.5 + 0.5
+    view_normal = -torch.nn.functional.normalize(allmap[2:5], dim=0) * 0.5 + 0.5
     rets.update({
             'rend_alpha': render_alpha.repeat(3, 1, 1),
             'rend_normal': render_normal,
-            'view_normal': allmap[2:5],
+            'view_normal': view_normal,
             'surf_depth': surf_depth.repeat(3, 1, 1),
             'surf_normal': surf_normal,
     })
