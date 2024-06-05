@@ -8,15 +8,15 @@ A significant portion of this project is built upon several existing works to pr
 ## ⭐ Features  
 | Preview | General |
 | --- | --- |
-|![visualization](assets/viser_capture.gif)|![visualization](assets/viser_general_opt.gif) | 
+| <img src="assets/viser_capture.gif" width="450"/> | <img src="assets/viser_general_opt.gif" width="450"/> |
 
 |  Edit  | Transform |
 | --- | --- |
-| ![visualization](assets/viser_edit_opt.gif) | ![visualization](assets/viser_transform_opt.gif) |
+| <img src="assets/viser_edit_opt.gif" width="450"/> | <img src="assets/viser_transform_opt.gif" width="450"/> |
 
 |  Rendering  | Training |
 | --- | --- |
-| ![visualization](assets/viser_render.gif) | ![visualization](assets/viser_train.gif) |
+| <img src="assets/viser_render.gif" width="450"/> | <img src="assets/viser_train.gif" width="450"/> |
 
 ## Updates History
 - 2024/06/05
