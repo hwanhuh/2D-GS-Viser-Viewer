@@ -4,19 +4,15 @@
 
 This repo contains the *unofficial* viewer for the "2D Gaussian Splatting for Geometrically Accurate Radiance Fields". 
 A significant portion of this project is built upon several existing works to provide enhanced visualization and editing capabilities for 2D Gaussian Splatting data.
+![visualization](assets/viser_capture.gif)
 
 ## ⭐ Features  
-| Preview | General |
-| --- | --- |
-| <img src="assets/viser_capture.gif" width="450"/> | <img src="assets/viser_general_opt.gif" width="450"/> |
-
-|  Edit  | Transform |
-| --- | --- |
-| <img src="assets/viser_edit_opt.gif" width="450"/> | <img src="assets/viser_transform_opt.gif" width="450"/> |
-
 |  Rendering  | Training |
 | --- | --- |
 | <img src="assets/viser_render.gif" width="450"/> | <img src="assets/viser_train.gif" width="450"/> |
+| General | Edit  | Transform |
+| --- | --- | --- |
+| <img src="assets/viser_general_opt.gif" width="300"/> | <img src="assets/viser_edit_opt.gif" width="300"/> | <img src="assets/viser_transform_opt.gif" width="300"/> |
 
 ## Updates History
 - 2024/06/05
