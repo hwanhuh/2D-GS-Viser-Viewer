@@ -14,11 +14,12 @@ from typing import Tuple, Literal, List
 from viser.theme import TitlebarButton, TitlebarConfig, TitlebarImage
 
 from arguments import ModelParams, PipelineParams, get_combined_args
+from utils.mesh_utils import GaussianExtractor
 
 from viewer_model import GaussianModelforViewer as GaussianModel
 from viewer_renderer import ViewerRenderer
 from internal.viewer import ClientThread
-from internal.viewer.ui import populate_render_tab, TransformPanel, EditPanel
+from internal.viewer.ui import RenderPanel, TransformPanel, EditPanel
 from internal.viewer.ui.up_direction_folder import UpDirectionFolder
 
 DROPDOWN_USE_DIRECT_APPEARANCE_EMBEDDING_VALUE = "@Direct"
@@ -29,7 +30,7 @@ class Viewer:
             model_paths: str,
             host: str = "0.0.0.0",
             port: int = 8080,
-            background_color: Tuple = (0, 0, 0),
+            background_color: Tuple = (0.5, 0.5, 0.5),
             image_format: Literal["jpeg", "png"] = "jpeg",
             reorient: Literal["auto", "enable", "disable"] = "auto",
             sh_degree: int = 3,
@@ -41,9 +42,10 @@ class Viewer:
             default_camera_look_at: List = None,
             no_edit_panel: bool = False,
             no_render_panel: bool = False,
-            white_background: bool=True,
             iterations: int=30000,
+            crop_box_size: float=16.0,
             from_direct_path: str = None, 
+            is_training: bool = False,
     ):
         self.device = torch.device("cuda")
         self.render_type_name = {
@@ -54,48 +56,47 @@ class Viewer:
             "Depth": 'surf_depth',
             "Depth2Normal": 'surf_normal',
         }
-        self.model_paths = model_paths[0]
         self.host = host
         self.port = port
-        self.background_color = background_color
+        self.background_color = torch.tensor(background_color, dtype=torch.float32, device="cuda")
         self.image_format = image_format
         self.sh_degree = sh_degree
         self.enable_transform = enable_transform
         self.show_cameras = show_cameras
+        self.crop_box_size = crop_box_size
+        self.total_device_memory = torch.cuda.get_device_properties(self.device).total_memory / 1024 ** 2
 
         self.up_direction = np.asarray([0., 0., 1.])
         self.camera_center = np.asarray([0., 0., 0.])
         self.default_camera_position = default_camera_position
         self.default_camera_look_at = default_camera_look_at
+        self.is_training = is_training
 
-        self.simplified_model = True
-        self.show_edit_panel = True
-        self.show_render_panel = True
+        self.show_edit_panel = ~no_edit_panel
         self.show_render_panel = ~no_render_panel
 
-        parser = ArgumentParser(description="Vieweer Parameters")
+        parser = ArgumentParser(description="Viewer Parameters")
         self.pipe = PipelineParams(parser)
-        bg_color = [1, 1, 1] if white_background else [0, 0, 0]
-        self.background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         # load and create models
-        if not self.model_paths.lower().endswith('.ply'):
-            self.ply_path = os.path.join(self.model_paths, "point_cloud", "iteration_" + str(iterations), "point_cloud.ply")
-        else: self.ply_path = self.model_paths
-        if not os.path.exists(self.ply_path):
-            print(self.ply_path)
-            raise FileNotFoundError
-        print('[INFO] ply path loaded from: ', self.ply_path)
-
         self.gaussian_model = GaussianModel(sh_degree=self.sh_degree)
-        self.gaussian_model.load_ply(self.ply_path)
-        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.pipe, self.background)
-        training_output_base_dir = self.model_paths
+        self.model_paths = model_paths[0]
+        if not self.is_training:
+            if not self.model_paths.lower().endswith('.ply'):
+                self.ply_path = os.path.join(self.model_paths, "point_cloud", "iteration_" + str(iterations), "point_cloud.ply")
+            else: self.ply_path = self.model_paths
+            if not os.path.exists(self.ply_path):
+                print(self.ply_path)
+                raise FileNotFoundError
+            print('[INFO] ply path loaded from: ', self.ply_path)
+            self.gaussian_model.load_ply(self.ply_path)
 
+        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.pipe, self.background_color)
+        
         # reorient the scene
         cameras_json_path = cameras_json
         if cameras_json_path is None:
-            cameras_json_path = os.path.join(training_output_base_dir, "cameras.json")
+            cameras_json_path = os.path.join(self.model_paths, "cameras.json")
         self.camera_transform = self._reorient(cameras_json_path, mode=reorient)
         if up is not None:
             self.camera_transform = torch.eye(4, dtype=torch.float)
@@ -107,9 +108,17 @@ class Viewer:
         self.camera_poses = self.load_camera_poses(cameras_json_path)
         if len(self.camera_poses) > 0:
             self.camera_center = np.mean(np.asarray([i["position"] for i in self.camera_poses]), axis=0)
-
-        self.loaded_model_count = 1
         self.clients = {}
+
+    def _get_training_gaussians(self, new_gaussians):
+        # slow and large gpu consumption
+        self.gaussian_model._xyz = new_gaussians._xyz.clone().detach()
+        self.gaussian_model._scaling = new_gaussians._scaling.clone().detach()
+        self.gaussian_model._opacity = new_gaussians._opacity.clone().detach()
+        self.gaussian_model._rotation = new_gaussians._rotation.clone().detach()
+        self.gaussian_model._features_dc = new_gaussians._features_dc.clone().detach()
+        self.gaussian_model._features_rest = new_gaussians._features_rest.clone().detach()
+        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.pipe, self.background_color)
 
     def _reorient(self, cameras_json_path: str, mode: str):
         transform = torch.eye(4, dtype=torch.float)
@@ -170,11 +179,11 @@ class Viewer:
             camera_handle = viser_server.add_camera_frustum(
                 name="cameras/{}".format(name),
                 fov=float(2 * np.arctan(cx / fx)),
-                scale=0.1,
+                scale=0.05,
                 aspect=float(cx / cy),
                 wxyz=R.wxyz,
                 position=c2w[:3, 3],
-                color=(205, 25, 0),
+                color=(255, 255, 0),
             )
 
             @camera_handle.on_click
@@ -186,34 +195,62 @@ class Viewer:
             self.camera_handles.append(camera_handle)
 
         self.camera_visible = True
-
         def toggle_camera_visibility(_):
             with viser_server.atomic():
                 self.camera_visible = not self.camera_visible
                 for i in self.camera_handles:
                     i.visible = self.camera_visible
 
-        # def update_camera_scale(_):
-        #     with viser_server.atomic():
-        #         for i in self.camera_handles:
-        #             i.scale = self.camera_scale_slider.value
-
-        with viser_server.add_gui_folder("Cameras"):
-            self.toggle_camera_button = viser_server.add_gui_button("Toggle Camera Visibility")
-            # self.camera_scale_slider = viser_server.add_gui_slider(
-            #     "Camera Scale",
-            #     min=0.,
-            #     max=1.,
-            #     step=0.01,
-            #     initial_value=0.1,
-            # )
-        self.toggle_camera_button.on_click(toggle_camera_visibility)
-        # self.camera_scale_slider.on_update(update_camera_scale)
+        self.show_cameras_frustrum = viser_server.add_gui_button("Show Train Cameras")
+        self.show_cameras_frustrum.on_click(toggle_camera_visibility)
     
+    def get_gpu_memory_usage(self):
+        total_memory = torch.cuda.memory_allocated() + torch.cuda.memory_reserved() 
+        return f"{total_memory / 1024 ** 2:.1f} / {self.total_device_memory:.1f} MB"
+
     def start(self, block: bool = True, server_config_fun=None, tab_config_fun=None):
         # create viser server
         server = viser.ViserServer(host=self.host, port=self.port)
+        self._setup_titles(server)
+        if server_config_fun is not None:
+            server_config_fun(self, server)
 
+        tabs = server.add_gui_tab_group()
+        if tab_config_fun is not None:
+            tab_config_fun(self, server, tabs)
+
+        # setup panels 
+        self._setup_general_features_folder(server, tabs)
+
+        if self.show_edit_panel:
+            with tabs.add_tab("Edit") as edit_tab:
+                self.edit_panel = EditPanel(server, self, edit_tab)
+
+        self.transform_panel: TransformPanel = None
+        if self.enable_transform:
+            with tabs.add_tab("Transform"):
+                self.transform_panel = TransformPanel(server, self)
+
+        if self.show_render_panel:
+            with tabs.add_tab("Render"):
+                self.render_panel = RenderPanel(server, 
+                                                self, 
+                                                self.model_paths, 
+                                                Path('./renders'),
+                                                orientation_transform=torch.linalg.inv(self.camera_transform).cpu().numpy(),
+                                                enable_transform=self.enable_transform,
+                                                background_color=self.background_color.detach().cpu().numpy().tolist(),
+                                                sh_degree=self.sh_degree,
+                )
+        # register hooks
+        server.on_client_connect(self._handle_new_client)
+        server.on_client_disconnect(self._handle_client_disconnect)
+
+        if block is True:
+            while True:
+                time.sleep(999)
+
+    def _setup_titles(self, server):
         buttons = (
             TitlebarButton(
                 text="Simple Viser Viewer for 2D Gaussian Splatting",
@@ -233,21 +270,29 @@ class Viewer:
         )
         titlebar_theme = TitlebarConfig(buttons=buttons, image=image)
         brand_color = server.add_gui_rgb("Brand color", (10, 10, 10), visible=False)
-
         server.configure_theme(
             titlebar_content=titlebar_theme,
             show_logo=True,
             brand_color=brand_color.value,
         )
 
-        if server_config_fun is not None:
-            server_config_fun(self, server)
-
-        tabs = server.add_gui_tab_group()
-        if tab_config_fun is not None:
-            tab_config_fun(self, server, tabs)
-
+    def _setup_general_features_folder(self, server, tabs):
         with tabs.add_tab("General"):
+            if self.is_training:
+                with server.add_gui_folder("Training Infos"):
+                    self.iter = server.add_gui_text('Iteration', initial_value = '0')
+                    self.loss = server.add_gui_text('Loss', initial_value = '0.0')
+                    self.dist = server.add_gui_text('distortion', initial_value = '0.0')
+                    self.norm = server.add_gui_text('normal', initial_value = '0.0')
+                    self.gpu_mem = server.add_gui_text(
+                        'Memory Usage',
+                        initial_value = self.get_gpu_memory_usage()
+                    )
+            else:
+                self.gpu_mem = server.add_gui_text(
+                    'Memory Usage',
+                    initial_value = self.get_gpu_memory_usage()
+                )
             with server.add_gui_folder("Render Options"):
                 self.max_res_when_static = server.add_gui_slider(
                     "Max Res",
@@ -286,9 +331,13 @@ class Viewer:
                 )
                 self.render_type.on_update(self._handle_render_type_updated)
 
+                # add cameras
+                if self.show_cameras is True:
+                    self.add_cameras_to_scene(server)
+
             with server.add_gui_folder("Split Mode"):
                 self.enable_split = server.add_gui_checkbox(
-                    "Split Mode",
+                    "use Split",
                     initial_value=False,
                 )
                 self.mode_slider = server.add_gui_slider(
@@ -301,15 +350,26 @@ class Viewer:
                 self.mode_slider.on_update(self._handle_option_updated)
 
                 self.render_type1 = server.add_gui_dropdown(
-                    "Mode 1", ("RGB", "Alpha", "Normal", "View-Normal", "Depth", "Depth2Normal")
+                    "Render Type 1", ("RGB", "Alpha", "Normal", "View-Normal", "Depth", "Depth2Normal")
                 )
                 self.render_type2 = server.add_gui_dropdown(
-                    "Mode 2", ("RGB", "Alpha", "Normal", "View-Normal", "Depth", "Depth2Normal")
+                    "Render Type 2", ("RGB", "Alpha", "Normal", "View-Normal", "Depth", "Depth2Normal")
                 )
                 self.render_type1.on_update(self._handle_render_type1_updated)
                 self.render_type2.on_update(self._handle_render_type2_updated)
 
             with server.add_gui_folder("Gaussian Model"):
+                self.enable_ptc = server.add_gui_checkbox(
+                    "as Pointcloud",
+                    initial_value=False,
+                )
+                self.point_size = server.add_gui_number(
+                    "Point Size",
+                    min=0.001,
+                    initial_value=0.001,
+                )
+                self.point_size.on_update(self._handle_option_updated)
+
                 self.scaling_modifier = server.add_gui_slider(
                     "Scaling Modifier",
                     min=0.,
@@ -329,114 +389,47 @@ class Viewer:
                     )
                     self.active_sh_degree_slider.on_update(self._handle_activate_sh_degree_slider_updated)
 
-                self.enable_ptc = server.add_gui_checkbox(
-                    "as Pointcloud",
-                    initial_value=False,
-                )
-                self.point_size = server.add_gui_number(
-                    "Point Size",
-                    min=0.001,
-                    initial_value=0.001,
-                )
-                self.point_size.on_update(self._handle_option_updated)
-
             with server.add_gui_folder("Crop Box"):
                 self.enable_crop = server.add_gui_checkbox(
-                    "use Crop Box",
+                    "use Crop",
                     initial_value=False,
                 )
-                self.x_min = server.add_gui_slider(
-                    "x_min",
-                    min=-10.,
-                    max=0.,
-                    step=0.1,
-                    initial_value=-3.,
+                self.box_x = server.add_gui_multi_slider(
+                    'x range', 
+                    min = -self.crop_box_size,
+                    max = self.crop_box_size,
+                    step = 0.1,
+                    initial_value= [-4.0, 4.0]
                 )
-                self.x_max = server.add_gui_slider(
-                    "x_max",
-                    min=0.,
-                    max=10.,
-                    step=0.1,
-                    initial_value=3.,
+                self.box_y = server.add_gui_multi_slider(
+                    'y range', 
+                    min = -self.crop_box_size,
+                    max = self.crop_box_size,
+                    step = 0.1,
+                    initial_value=[-4.0, 4.0]
                 )
-                self.y_min = server.add_gui_slider(
-                    "y_min",
-                    min=-10.,
-                    max=0.,
-                    step=0.1,
-                    initial_value=-3.,
+                self.box_z = server.add_gui_multi_slider(
+                    'z range', 
+                    min = -self.crop_box_size,
+                    max = self.crop_box_size,
+                    step = 0.1,
+                    initial_value=[-4.0, 4.0]
                 )
-                self.y_max = server.add_gui_slider(
-                    "y_max",
-                    min=0.,
-                    max=10.,
-                    step=0.1,
-                    initial_value=3.,
-                )
-                self.z_min = server.add_gui_slider(
-                    "z_min",
-                    min=-10.,
-                    max=0.,
-                    step=0.1,
-                    initial_value=-3.,
-                )
-                self.z_max = server.add_gui_slider(
-                    "z_max",
-                    min=0.,
-                    max=10.,
-                    step=0.1,
-                    initial_value=3.,
-                )
-                self.x_min.on_update(self._handle_option_updated)
-                self.x_max.on_update(self._handle_option_updated)
-                self.y_min.on_update(self._handle_option_updated)
-                self.y_max.on_update(self._handle_option_updated)
-                self.z_min.on_update(self._handle_option_updated)
-                self.z_max.on_update(self._handle_option_updated)
+                self.box_x.on_update(self._handle_option_updated)
+                self.box_y.on_update(self._handle_option_updated)
+                self.box_z.on_update(self._handle_option_updated)
 
-            # add cameras
-            if self.show_cameras is True:
-                self.add_cameras_to_scene(server)
-
-            go_to_scene_center = server.add_gui_button(
-                "Go to scene center",
-            )
-
+            go_to_scene_center = server.add_gui_button("Go to scene center",)
             @go_to_scene_center.on_click
             def _(event: viser.GuiEvent) -> None:
                 assert event.client is not None
                 event.client.camera.position = self.camera_center + np.asarray([2., 0., 0.])
                 event.client.camera.look_at = self.camera_center
 
-        if self.show_edit_panel is True:
-            with tabs.add_tab("Edit") as edit_tab:
-                self.edit_panel = EditPanel(server, self, edit_tab)
-
-        self.transform_panel: TransformPanel = None
-        if self.enable_transform is True:
-            with tabs.add_tab("Transform"):
-                self.transform_panel = TransformPanel(server, self, self.loaded_model_count)
-
-        if self.show_render_panel is True:
-            with tabs.add_tab("Render"):
-                populate_render_tab(
-                    server,
-                    self,
-                    self.model_paths,
-                    Path("./"),
-                    orientation_transform=torch.linalg.inv(self.camera_transform).cpu().numpy(),
-                    enable_transform=self.enable_transform,
-                    background_color=self.background_color,
-                    sh_degree=self.sh_degree,
-                )
-
-        # register hooks
-        server.on_client_connect(self._handle_new_client)
-        server.on_client_disconnect(self._handle_client_disconnect)
-
-        if block is True:
-            while True:
-                time.sleep(999)
+            # self.client_debugger = server.add_gui_checkbox(
+            #     "Client debugger",
+            #     initial_value=False,
+            # )
 
     def _handle_render_type_updated(self, _):
         if self.render_type.value in self.render_type_name.keys():
@@ -511,14 +504,13 @@ class Viewer:
             print(err)
 
 if __name__ == "__main__":
-    # define arguments
     parser = ArgumentParser()
     parser.add_argument("model_paths", type=str, nargs="+")
     parser.add_argument("--host", "-a", type=str, default="0.0.0.0")
     parser.add_argument("--port", "-p", type=int, default=8080)
-    parser.add_argument("--background_color", "--background_color", "--bkg_color", "-b",
-                        type=str, nargs="+", default=["black"],
-                        help="e.g.: white, black, 0 0 0, 1 1 1")
+    parser.add_argument("--background_color", "-b",
+                        type=str, nargs="+", default=["gray"],
+                        help="e.g.: white, gray, black, [0 0 0], [0.5 0.5 0.5], [1 1 1]")
     parser.add_argument("--image_format", "--image-format", "-f", type=str, default="jpeg")
     parser.add_argument("--reorient", "-r", type=str, default="auto",
                         help="whether reorient the scene, available values: auto, enable, disable")
@@ -537,8 +529,8 @@ if __name__ == "__main__":
     parser.add_argument("--no_edit_panel", action="store_true", default=False)
     parser.add_argument("--no_render_panel", action="store_true", default=False)
 
-    parser.add_argument("--white_background", action="store_true", default=False)
     parser.add_argument("--iterations", type=int, default=30000)
+    parser.add_argument("--crop_box_size", type=float, default=16.0)
     parser.add_argument("--float32_matmul_precision", "--fp", type=str, default=None)
     parser.add_argument("--from_direct_path", type=str, default=None)
     args = parser.parse_args()
@@ -551,9 +543,11 @@ if __name__ == "__main__":
     # arguments post process
     if len(args.background_color) == 1 and isinstance(args.background_color[0], str):
         if args.background_color[0] == "white":
-            args.background_color = (1., 1., 1.)
+            args.background_color = [1., 1., 1.]
+        elif args.background_color[0] == "black":
+            args.background_color = [0., 0., 0.]
         else:
-            args.background_color = (0., 0., 0.)
+            args.background_color = [0.5, 0.5, 0.5]
     else:
         args.background_color = tuple([float(i) for i in args.background_color])
 

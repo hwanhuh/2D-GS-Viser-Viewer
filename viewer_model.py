@@ -42,6 +42,7 @@ class GaussianModelforViewer(GaussianModel):
         self.org_features_dc = self._features_dc 
         self.org_features_rest = self._features_rest
 
+
     def transform_with_vectors(self,
                                 idx: int,
                                 scale: float,
