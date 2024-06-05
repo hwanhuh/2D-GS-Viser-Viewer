@@ -4,7 +4,7 @@
 
 This repo contains the *unofficial* viewer for the "2D Gaussian Splatting for Geometrically Accurate Radiance Fields". 
 A significant portion of this project is built upon several existing works to provide enhanced visualization and editing capabilities for 2D Gaussian Splatting data.
-![visualization](assets/viser_capture.gif)
+![visualization](assets/viser_teaser.gif)
 
 ## ⭐ Features  
 |  Rendering  | Training |
