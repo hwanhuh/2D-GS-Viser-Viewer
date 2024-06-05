@@ -5,7 +5,8 @@
 This repo contains the *unofficial* viewer for the "2D Gaussian Splatting for Geometrically Accurate Radiance Fields". 
 A significant portion of this project is built upon several existing works to provide enhanced visualization and editing capabilities for 2D Gaussian Splatting data.
 
-| Preview | Render |
+## ⭐ Features  
+| Preview | General |
 | --- | --- |
 |![visualization](assets/viser_capture.gif)|![visualization](assets/viser_general_opt.gif) | 
 
@@ -13,8 +14,20 @@ A significant portion of this project is built upon several existing works to pr
 | --- | --- |
 | ![visualization](assets/viser_edit_opt.gif) | ![visualization](assets/viser_transform_opt.gif) |
 
+|  Rendering  | Training |
+| --- | --- |
+| ![visualization](assets/viser_render.gif) | ![visualization](assets/viser_train.gif) |
 
-## ⭐New Features  
+## Updates History
+- 2024/06/05
+    - Training / Rendering Features
+        - Now supports train w/ viewer (large memory consumption)
+        - Supports render path generation & preview camera paths 
+            - you can make your camera paths & view preview videos along the generated path 
+    - Minor code revision
+        - Add 'Set to default' in the transform panel 
+        - Cropbox w/ multi slider
+        - For clarity, edit mode visualizes only pointcloud
 - 2024/06/03
     - General Features
         - Supports various render types including ***Normal / Depth / Depth2Normal***
@@ -26,7 +39,7 @@ A significant portion of this project is built upon several existing works to pr
     - Transform Features
         - Rigid Transform 
 - 2024/05/31
-    - code release
+    - Viewer release
 
 ## Installation
 
@@ -66,7 +79,6 @@ pip install lightning
         else:
             vector = tuple(vector)
             return cast(TVector, vector)
-
 ```
 
 
@@ -74,13 +86,15 @@ pip install lightning
 
 
 ## Usage
-- common use
+- Viewer ply file 
 ```bash
 python viewer.py <path to pre-trained model> <or direct path to the ply file>
-```
-- for transform the scene 
-```bash
+### for transform mode
 python viewer.py <path to pre-trained model> <or direct path to the ply file> --enable_transform
+```
+- Train w/ viewer
+```bash
+python train_w_viewer.py -s <path to datas>
 ```
 
 ### Control 
