@@ -10,6 +10,7 @@ A significant portion of this project is built upon several existing works to pr
 |  Rendering  | Training |
 | --- | --- |
 | <img src="assets/viser_render.gif" width="450"/> | <img src="assets/viser_train.gif" width="450"/> |
+
 | General | Edit  | Transform |
 | --- | --- | --- |
 | <img src="assets/viser_general_opt.gif" width="300"/> | <img src="assets/viser_edit_opt.gif" width="300"/> | <img src="assets/viser_transform_opt.gif" width="300"/> |
