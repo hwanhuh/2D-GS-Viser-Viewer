@@ -18,18 +18,19 @@ A significant portion of this project is built upon several existing works to pr
 ## Updates History
 - 2024/06/05
     - Training / Rendering Features
-        - Now supports train w/ viewer (large memory consumption)
+        - Now supports training with viewer (large memory consumption)
         - Supports render path generation & preview camera paths 
-            - you can make your camera paths & view preview videos along the generated path 
+            - Create custom camera paths & view preview videos along the generated path 
     - Minor code revision
         - Add 'Set to default' in the transform panel 
         - Cropbox w/ multi slider
-        - For clarity, edit mode visualizes only pointcloud
+        - Edit mode visualizes only pointcloud for clarity
+        - Fix negative parts truncation in normal rendering
 - 2024/06/03
     - General Features
         - Supports various render types including ***Normal / Depth / Depth2Normal***
         - Direct comparison between different render types, *e.g.,* normal vs depth-to-normal
-        - Crop Box Region
+        - Cropbox Region
         - Pointcloud visualization
     - Editing Features
         - Edit, delete and save point clouds (Recommended with: 'Add pointcloud')
@@ -83,10 +84,10 @@ pip install lightning
 
 
 ## Usage
-- Viewer ply file 
+- View a 2D GS ply file 
 ```bash
 python viewer.py <path to pre-trained model> <or direct path to the ply file>
-### for transform mode
+### enable transform mode
 python viewer.py <path to pre-trained model> <or direct path to the ply file> --enable_transform
 ```
 - Train w/ viewer
