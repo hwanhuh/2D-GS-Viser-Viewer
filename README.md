@@ -9,7 +9,7 @@ A significant portion of this project is built upon several existing works to pr
 ## ⭐ Features  
 |  Rendering  | Training |
 | --- | --- |
-| <img src="assets/viser_render.gif" width="450"/> | <img src="assets/viser_train.gif" width="450"/> |
+| <img src="assets/viser_train.gif" width="450"/> | <img src="assets/viser_train2.gif" width="450"/> |
 
 | General | Edit  | Transform |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ A significant portion of this project is built upon several existing works to pr
     - Render Types Update
         - Now supports ***Edge/Curvature/Depth-Distortion*** render type
             - The edge/curvature visualization is inspired by [Gaussian Splatting Monitor](https://github.com/RongLiu-Leo/Gaussian-Splatting-Monitor). 
-        - For one channel output image (*e.g.,* depth), use 'Turbo' color map for the better visualization 
+        - For one channel output image (*e.g.,* depth), use the 'Turbo' color map for the better visualization 
         - **Note**. Depth-distortion visualization is quite interesting. In the early stages of training, it shows noisy and misaligned splats, but after training, splats align along the depth, highlighting 'edges' on the view frustum.
     - Bug Fixes 
         - Various render options are renderable during training 
@@ -29,7 +29,6 @@ A significant portion of this project is built upon several existing works to pr
     - Training / Rendering Features
         - Now supports training with a viewer (large memory consumption)
         - Supports render path generation & preview camera paths 
-            - Create custom camera paths & view preview videos along the generated path 
     - Minor code revision
         - Add 'Set to default' in the transform panel 
         - Cropbox w/ multi slider
