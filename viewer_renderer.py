@@ -75,13 +75,14 @@ class ViewerRenderer:
         rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
         # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
-        screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
+        means3D = pc.get_xyz
+        screenspace_points = torch.zeros_like(means3D, dtype=means3D.dtype, requires_grad=True, device="cuda") + 0
         try:
             screenspace_points.retain_grad()
         except:
             pass
-        means3D = pc.get_xyz
         means2D = screenspace_points
+        opacity = pc.get_opacity
         opacity = pc.get_opacity
 
         scales = None
