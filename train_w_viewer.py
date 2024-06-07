@@ -35,6 +35,7 @@ from viewer import Viewer
 class Trainer:
     def __init__(self):
         self.update_queue = queue.Queue()
+        self.lock = threading.Lock()
     
     def set_viewer(self, exp_path):
         self.viser_viewer = Viewer(model_paths = exp_path, 
@@ -79,9 +80,10 @@ class Trainer:
 
         for iteration in range(first_iter, opt.iterations + 1):      
             iter_start.record()
+            gaussians.update_learning_rate(iteration)
             if iteration % 100 == 0:
-                gaussians.update_learning_rate(iteration)
-                self.viser_viewer._get_training_gaussians(gaussians)
+                with self.lock:
+                    self.viser_viewer._get_training_gaussians(gaussians)
 
             # Every 1000 its we increase the levels of SH up to a maximum degree
             if iteration % 1000 == 0:
