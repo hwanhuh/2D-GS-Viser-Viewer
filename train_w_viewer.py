@@ -11,6 +11,7 @@
 
 import os
 import torch
+import queue
 import threading
 from random import randint
 from utils.loss_utils import l1_loss, ssim
@@ -33,7 +34,7 @@ from viewer import Viewer
 
 class Trainer:
     def __init__(self):
-        pass
+        self.update_queue = queue.Queue()
     
     def set_viewer(self, exp_path):
         self.viser_viewer = Viewer(model_paths = exp_path, 
@@ -42,14 +43,12 @@ class Trainer:
                                     is_training = True,
                                     show_cameras = True,
                                     )
-    
     def viewer_thread(self):
         self.viser_viewer.start()
 
     def training(self, dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint):
         first_iter = 0
         tb_writer, exp_path = self.prepare_output_and_logger(dataset)
-        self.set_viewer(exp_path)
         gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians)
         gaussians.training_setup(opt)
@@ -68,20 +67,21 @@ class Trainer:
         ema_dist_for_log = 0.0
         ema_normal_for_log = 0.0
 
+        self.set_viewer([exp_path])
         self.viser_viewer._get_training_gaussians(gaussians)
 
         viewer_thread = threading.Thread(target=self.viewer_thread)
         viewer_thread.start()
+        # viewer_thread.join()
 
         progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
         first_iter += 1
 
-        for iteration in range(first_iter, opt.iterations + 1):        
-
+        for iteration in range(first_iter, opt.iterations + 1):      
             iter_start.record()
-
-            gaussians.update_learning_rate(iteration)
-            self.viser_viewer._get_training_gaussians(gaussians)
+            if iteration % 100 == 0:
+                gaussians.update_learning_rate(iteration)
+                self.viser_viewer._get_training_gaussians(gaussians)
 
             # Every 1000 its we increase the levels of SH up to a maximum degree
             if iteration % 1000 == 0:
@@ -131,14 +131,15 @@ class Trainer:
                         "Points": f"{len(gaussians.get_xyz)}"
                     }
                     progress_bar.set_postfix(loss_dict)
+                    progress_bar.update(10)
 
-                    ################# 
+                ################# 
+                if iteration % 100 == 0:
                     self.viser_viewer.iter.value = f'{iteration} / {opt.iterations}'
                     self.viser_viewer.loss.value = loss_dict['Loss']
                     self.viser_viewer.dist.value = loss_dict['distort']
                     self.viser_viewer.norm.value = loss_dict['normal']
 
-                    progress_bar.update(10)
                 if iteration == opt.iterations:
                     progress_bar.close()
 
@@ -151,7 +152,6 @@ class Trainer:
                 if (iteration in saving_iterations):
                     print("\n[ITER {}] Saving Gaussians".format(iteration))
                     scene.save(iteration)
-
 
                 # Densification
                 if iteration < opt.densify_until_iter:

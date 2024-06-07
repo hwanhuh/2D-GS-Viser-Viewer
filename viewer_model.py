@@ -33,6 +33,7 @@ class GaussianModelforViewer(GaussianModel):
 
         self._features_dc = self._features_dc[gaussians_to_be_preserved]
         self._features_rest = self._features_rest[gaussians_to_be_preserved]
+        self.backup()
 
     def backup(self):
         # large memory consumption 

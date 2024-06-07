@@ -50,11 +50,15 @@ class Viewer:
         self.device = torch.device("cuda")
         self.render_type_name = {
             "RGB": 'render', 
+            "Edge": 'edge',
             "Alpha": 'rend_alpha', 
             "Normal": 'rend_normal', 
             "View-Normal": 'view_normal',
             "Depth": 'surf_depth',
-            "Depth2Normal": 'surf_normal',
+            "Depth-Distort": 'rend_dist',
+            "Depth-to-Normal": 'surf_normal',
+            "Depth-to-Curvature": 'curvature',
+            "None": 'render',
         }
         self.host = host
         self.port = port
@@ -71,44 +75,77 @@ class Viewer:
         self.default_camera_position = default_camera_position
         self.default_camera_look_at = default_camera_look_at
         self.is_training = is_training
-
         self.show_edit_panel = ~no_edit_panel
         self.show_render_panel = ~no_render_panel
 
+        self._initialize_pipeline_params()
+        self._initialize_models(model_paths, iterations)
+
+        if cameras_json is None:
+            cameras_json = os.path.join(self.model_paths, "cameras.json")
+        self.camera_transform = self._reorient_camera(cameras_json, reorient, up)
+        self.camera_poses = self._init_camera_poses(cameras_json)
+        self.clients = {}
+
+    def _initialize_pipeline_params(self):
         parser = ArgumentParser(description="Viewer Parameters")
         self.pipe = PipelineParams(parser)
 
-        # load and create models
+    def _initialize_models(self, model_paths, iterations):
+        # init gaussian model & renderer
         self.gaussian_model = GaussianModel(sh_degree=self.sh_degree)
         self.model_paths = model_paths[0]
         if not self.is_training:
-            if not self.model_paths.lower().endswith('.ply'):
-                self.ply_path = os.path.join(self.model_paths, "point_cloud", "iteration_" + str(iterations), "point_cloud.ply")
-            else: self.ply_path = self.model_paths
+            self.ply_path = self._get_ply_path(iterations)
             if not os.path.exists(self.ply_path):
                 print(self.ply_path)
                 raise FileNotFoundError
-            print('[INFO] ply path loaded from: ', self.ply_path)
+            print('[INFO] ply path loaded from:', self.ply_path)
             self.gaussian_model.load_ply(self.ply_path)
-
         self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.pipe, self.background_color)
-        
-        # reorient the scene
-        cameras_json_path = cameras_json
-        if cameras_json_path is None:
-            cameras_json_path = os.path.join(self.model_paths, "cameras.json")
-        self.camera_transform = self._reorient(cameras_json_path, mode=reorient)
-        if up is not None:
-            self.camera_transform = torch.eye(4, dtype=torch.float)
-            up = torch.tensor(up)
-            up = -up / torch.linalg.norm(up)
-            self.up_direction = up.numpy()
 
-        # load camera poses
-        self.camera_poses = self.load_camera_poses(cameras_json_path)
-        if len(self.camera_poses) > 0:
-            self.camera_center = np.mean(np.asarray([i["position"] for i in self.camera_poses]), axis=0)
-        self.clients = {}
+    def _get_ply_path(self, iterations):
+        if not self.model_paths.lower().endswith('.ply'):
+            return os.path.join(self.model_paths, "point_cloud", f"iteration_{iterations}", "point_cloud.ply")
+        return self.model_paths
+
+    def _reorient_camera(self, cameras_json_path, mode, up):
+        transform = torch.eye(4, dtype=torch.float)
+
+        if mode == "disable":
+            return transform
+
+        if not os.path.exists(cameras_json_path):
+            if mode == "enable":
+                raise RuntimeError(f"{cameras_json_path} does not exist")
+            return transform
+
+        print(f"load {cameras_json_path}")
+        with open(cameras_json_path, "r") as f:
+            cameras = json.load(f)
+        up_vector = torch.zeros(3)
+        for cam in cameras:
+            up_vector += torch.tensor(cam["rotation"])[:3, 1]
+        up_vector = -up_vector / torch.linalg.norm(up_vector)
+        print(f"up vector = {up_vector}")
+        self.up_direction = up_vector.numpy()
+
+        if up is not None:
+            transform = torch.eye(4, dtype=torch.float)
+            up_vector = torch.tensor(up)
+            up_vector = -up_vector / torch.linalg.norm(up_vector)
+            self.up_direction = up_vector.numpy()
+
+        return transform
+
+    def _init_camera_poses(self, cameras_json_path):
+        if not os.path.exists(cameras_json_path):
+            return []
+        with open(cameras_json_path, "r") as f:
+            camera_poses = json.load(f)
+        if camera_poses:
+            self.camera_center = np.mean(np.asarray([i["position"] for i in camera_poses]), axis=0)
+        return camera_poses
 
     def _get_training_gaussians(self, new_gaussians):
         # slow and large gpu consumption
@@ -159,7 +196,6 @@ class Viewer:
             return
 
         self.camera_handles = []
-
         camera_pose_transform = np.linalg.inv(self.camera_transform.cpu().numpy())
         for camera in self.camera_poses:
             name = camera["img_name"]
@@ -194,16 +230,15 @@ class Viewer:
 
             self.camera_handles.append(camera_handle)
 
+        self.show_cameras_frustrum = viser_server.add_gui_button("Show Train Cameras")
         self.camera_visible = True
+        @self.show_cameras_frustrum.on_click
         def toggle_camera_visibility(_):
             with viser_server.atomic():
                 self.camera_visible = not self.camera_visible
                 for i in self.camera_handles:
                     i.visible = self.camera_visible
 
-        self.show_cameras_frustrum = viser_server.add_gui_button("Show Train Cameras")
-        self.show_cameras_frustrum.on_click(toggle_camera_visibility)
-    
     def get_gpu_memory_usage(self):
         total_memory = torch.cuda.memory_allocated() + torch.cuda.memory_reserved() 
         return f"{total_memory / 1024 ** 2:.1f} / {self.total_device_memory:.1f} MB"
@@ -288,10 +323,18 @@ class Viewer:
                         'Memory Usage',
                         initial_value = self.get_gpu_memory_usage()
                     )
+                    self.fps = server.add_gui_text(
+                        'fps',
+                        initial_value = ' frame/sec'
+                    )
             else:
                 self.gpu_mem = server.add_gui_text(
                     'Memory Usage',
                     initial_value = self.get_gpu_memory_usage()
+                )
+                self.fps = server.add_gui_text(
+                    'fps',
+                    initial_value = ' frame/sec'
                 )
             with server.add_gui_folder("Render Options"):
                 self.max_res_when_static = server.add_gui_slider(
@@ -327,12 +370,14 @@ class Viewer:
                 )
 
                 self.render_type = server.add_gui_dropdown(
-                    "Render Type", ("RGB", "Alpha", "Normal", "View-Normal", "Depth", "Depth2Normal")
+                    "Render Type", tuple(self.render_type_name.keys())[:-1]
                 )
-                self.render_type.on_update(self._handle_render_type_updated)
+                @self.render_type.on_update
+                def _(event): 
+                    with server.atomic(): self._handle_option_updated(_)
 
                 # add cameras
-                if self.show_cameras is True:
+                if self.show_cameras:
                     self.add_cameras_to_scene(server)
 
             with server.add_gui_folder("Split Mode"):
@@ -350,13 +395,17 @@ class Viewer:
                 self.mode_slider.on_update(self._handle_option_updated)
 
                 self.render_type1 = server.add_gui_dropdown(
-                    "Render Type 1", ("RGB", "Alpha", "Normal", "View-Normal", "Depth", "Depth2Normal")
+                    "Render Type 1", tuple(self.render_type_name.keys())[:-1]
                 )
                 self.render_type2 = server.add_gui_dropdown(
-                    "Render Type 2", ("RGB", "Alpha", "Normal", "View-Normal", "Depth", "Depth2Normal")
+                    "Render Type 2", tuple(self.render_type_name.keys())[:-1]
                 )
-                self.render_type1.on_update(self._handle_render_type1_updated)
-                self.render_type2.on_update(self._handle_render_type2_updated)
+                @self.render_type1.on_update
+                def _(event): 
+                    with server.atomic(): self._handle_option_updated(_)
+                @self.render_type2.on_update
+                def _(event): 
+                    with server.atomic(): self._handle_option_updated(_)
 
             with server.add_gui_folder("Gaussian Model"):
                 self.enable_ptc = server.add_gui_checkbox(
