@@ -51,12 +51,12 @@ class TransformPanel:
         # create gui folder for each model
         
         with server.add_gui_folder("Model Transform"):
-            model_show_transform_control_checkbox = server.add_gui_checkbox(
+            self.model_show_transform_control_checkbox = server.add_gui_checkbox(
                 "use Transform",
                 initial_value=False,
             )
-            self._make_show_transform_control_checkbox_callback(i, model_show_transform_control_checkbox)
-            self.model_show_transform_control_checkboxes.append(model_show_transform_control_checkbox)
+            self._make_show_transform_control_checkbox_callback(i, self.model_show_transform_control_checkbox)
+            self.model_show_transform_control_checkboxes.append(self.model_show_transform_control_checkbox)
 
             self.pose_control_size = server.add_gui_slider(
                 "Control Mode",
@@ -100,10 +100,10 @@ class TransformPanel:
             self._make_r_xyz_text_callback(i, r_xyz_text_handle)
             self.model_r_xyz_text_handle.append(r_xyz_text_handle)
 
-            set_to_default = server.add_gui_button("Set to default")
-            @set_to_default.on_click
+            self.set_to_default = server.add_gui_button("Set to default")
+            @self.set_to_default.on_click
             def _(event: viser.GuiEvent) -> None:
-                if model_show_transform_control_checkbox.value:
+                if self.model_show_transform_control_checkbox.value:
                     assert event.client is not None
                     self.viewer.gaussian_model.backup() # set current value as a defalt 
                     self.viewer.camera_center = self.viewer.camera_center + np.array(t_xyz_text_handle.value)

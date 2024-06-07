@@ -419,9 +419,6 @@ class RenderPanel:
                             background_color: Tuple[float, float, float],
                             sh_degree: int,
     ) -> None:
-        # self.play_preview_check_box = server.add_gui_checkbox(
-        #             "preview", 
-        #             initial_value=False)
         
         fov_degrees = server.add_gui_slider(
             "FOV",
@@ -597,13 +594,13 @@ class RenderPanel:
 
         playback_folder = server.add_gui_folder("Playback")
         with playback_folder:
-            duration_number = server.add_gui_number("Duration (sec)", min=0.0, max=1e8, step=0.0001, initial_value=4.0)
-            framerate_number = server.add_gui_number("Frame rate (FPS)", min=0.1, max=240.0, step=1e-8, initial_value=30.0)
+            self.duration_number = server.add_gui_number("Duration (sec)", min=0.0, max=1e8, step=0.0001, initial_value=4.0)
+            self.framerate_number = server.add_gui_number("Frame rate (FPS)", min=0.1, max=240.0, step=1e-8, initial_value=30.0)
             framerate_buttons = server.add_gui_button_group("", ("24", "30", "60"))
 
             @framerate_buttons.on_click
             def _(_) -> None:
-                framerate_number.value = float(framerate_buttons.value)
+                self.framerate_number.value = float(framerate_buttons.value)
 
             play_button = server.add_gui_button("Trajectory play", icon=viser.Icon.PLAYER_PLAY)
             pause_button = server.add_gui_button("Pause", icon=viser.Icon.PLAYER_PAUSE, visible=False)
@@ -622,12 +619,12 @@ class RenderPanel:
         def add_preview_frame_slider() -> Optional[viser.GuiInputHandle[int]]:
             """Helper for creating the current frame # slider. This is removed and
             re-added anytime the `max` value changes."""
-            max_frame_index = int(framerate_number.value * duration_number.value) - 1
+            max_frame_index = int(self.framerate_number.value * self.duration_number.value) - 1
 
             if max_frame_index <= 0:
                 return None
             with playback_folder:
-                preview_frame_slider = server.add_gui_slider(
+                self.preview_frame_slider = server.add_gui_slider(
                     "Preview frame",
                     min=0,
                     max=max_frame_index,
@@ -637,11 +634,11 @@ class RenderPanel:
                     order=pause_button.order + 0.01,
                 )
 
-            @preview_frame_slider.on_update
+            @self.preview_frame_slider.on_update
             def _(_) -> None:
-                max_frame_index = int(framerate_number.value * duration_number.value) - 1
+                max_frame_index = int(self.framerate_number.value * self.duration_number.value) - 1
                 maybe_pose_and_fov = camera_path.interpolate_pose_and_fov(
-                    preview_frame_slider.value / max_frame_index if max_frame_index > 0 else 0
+                    self.preview_frame_slider.value / max_frame_index if max_frame_index > 0 else 0
                 )
                 if maybe_pose_and_fov is None:
                     return
@@ -683,7 +680,7 @@ class RenderPanel:
                     apply_transform()
                     viewer.rerender_for_all_client()
 
-            return preview_frame_slider
+            return self.preview_frame_slider
 
         @attach_viewport_checkbox.on_update
         def _(_) -> None:
@@ -691,20 +688,20 @@ class RenderPanel:
                 for client in server.get_clients().values():
                     client.camera.fov = fov_degrees.value
 
-        preview_frame_slider = add_preview_frame_slider()
+        self.preview_frame_slider = add_preview_frame_slider()
 
-        @duration_number.on_update
-        @framerate_number.on_update
+        @self.duration_number.on_update
+        @self.framerate_number.on_update
         def _(_) -> None:
-            nonlocal preview_frame_slider
-            old = preview_frame_slider
+            # nonlocal preview_frame_slider
+            old = self.preview_frame_slider
             assert old is not None
 
-            preview_frame_slider = add_preview_frame_slider()
-            if preview_frame_slider is not None:
+            self.preview_frame_slider = add_preview_frame_slider()
+            if self.preview_frame_slider is not None:
                 old.remove()
             else:
-                preview_frame_slider = old
+                self.preview_frame_slider = old
 
         # Play the camera trajectory when the play button is pressed.
         @play_button.on_click
@@ -714,11 +711,11 @@ class RenderPanel:
 
             def play() -> None:
                 while not play_button.visible:
-                    max_frame = int(framerate_number.value * duration_number.value)
+                    max_frame = int(self.framerate_number.value * self.duration_number.value)
                     if max_frame > 0:
-                        assert preview_frame_slider is not None
-                        preview_frame_slider.value = (preview_frame_slider.value + 1) % max_frame
-                    time.sleep(1.0 / framerate_number.value)
+                        assert self.preview_frame_slider is not None
+                        self.preview_frame_slider.value = (self.preview_frame_slider.value + 1) % max_frame
+                    time.sleep(1.0 / self.framerate_number.value)
             threading.Thread(target=play).start()
 
         # Play the camera trajectory when the play button is pressed.
@@ -741,7 +738,7 @@ class RenderPanel:
 
         def make_json_data(event):
             assert event.client is not None
-            num_frames = int(framerate_number.value * duration_number.value)
+            num_frames = int(self.framerate_number.value * self.duration_number.value)
             json_data = {}
             keyframes = []
             for keyframe, dummy in camera_path._keyframes.values():
@@ -765,8 +762,8 @@ class RenderPanel:
             json_data["camera_type"] = camera_type.value.lower()
             json_data["render_height"] = resolution.value[1]
             json_data["render_width"] = resolution.value[0]
-            json_data["fps"] = framerate_number.value
-            json_data["seconds"] = duration_number.value
+            json_data["fps"] = self.framerate_number.value
+            json_data["seconds"] = self.duration_number.value
             json_data["is_cycle"] = loop.value
             json_data["smoothness_value"] = smoothness.value
             json_data["orientation_transform"] = orientation_transform.tolist()
@@ -832,9 +829,9 @@ class RenderPanel:
 
         def make_cameras(event):
             assert event.client is not None
-            num_frames = int(framerate_number.value * duration_number.value)
+            num_frames = int(self.framerate_number.value * self.duration_number.value)
             preview_cameras = {}
-            preview_cameras["fps"] = framerate_number.value
+            preview_cameras["fps"] = self.framerate_number.value
 
             # now populate the camera path:
             camera_path_list = []
