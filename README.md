@@ -16,9 +16,18 @@ A significant portion of this project is built upon several existing works to pr
 | <img src="assets/viser_general_opt.gif" width="300"/> | <img src="assets/viser_edit_opt.gif" width="300"/> | <img src="assets/viser_transform_opt.gif" width="300"/> |
 
 ## Updates History
+- 2024/06/07
+    - Render Types Update
+        - Now supports ***Edge/Curvature/Depth-Distortion*** render type
+            - The edge/curvature visualization is inspired by [Gaussian Splatting Monitor](https://github.com/RongLiu-Leo/Gaussian-Splatting-Monitor). 
+        - For one channel output image (*e.g.,* depth), use 'Turbo' color map for the better visualization 
+        - **Note**. Depth-distortion visualization is quite interesting. In the early stages of training, it shows noisy and misaligned splats, but after training, splats align along the depth, highlighting 'edges' on the view frustum.
+    - Bug Fixes 
+        - Various render options are renderable during training 
+        - Transform after editing
 - 2024/06/05
     - Training / Rendering Features
-        - Now supports training with viewer (large memory consumption)
+        - Now supports training with a viewer (large memory consumption)
         - Supports render path generation & preview camera paths 
             - Create custom camera paths & view preview videos along the generated path 
     - Minor code revision
@@ -33,7 +42,7 @@ A significant portion of this project is built upon several existing works to pr
         - Cropbox Region
         - Pointcloud visualization
     - Editing Features
-        - Edit, delete and save point clouds (Recommended with: 'Add pointcloud')
+        - Edit, delete and save point clouds ~~(Recommended with: 'Add pointcloud')~~
     - Transform Features
         - Rigid Transform 
 - 2024/05/31
