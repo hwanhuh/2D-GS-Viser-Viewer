@@ -23,7 +23,7 @@ A significant portion of this project is built upon several existing works to pr
         - For one channel output image (*e.g.,* depth), use the 'Turbo' color map for the better visualization 
         - **Note**. Depth-distortion visualization is quite interesting. In the early stages of training, it shows noisy and misaligned splats, but after training, splats align along the depth, highlighting 'edges' on the view frustum.
     - Bug Fixes 
-        - Various render options are renderable during training 
+        - Various render options are available during training 
         - Transform after editing
 - 2024/06/05
     - Training / Rendering Features
