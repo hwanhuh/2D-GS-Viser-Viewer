@@ -54,42 +54,11 @@ A significant portion of this project is built upon several existing works to pr
 - Tested on Ubuntu 20.04.
 
 ```bash
-pip install viser==0.1.32
+pip install viser==0.1.29
 pip install splines  
 pip install lightning
 ```
-### ⭐IMPORTANT 
-
-- Also, you have to fix line 135 of '_message_api.py' (or '_scene_api.py') in viser (I don't know why the bug occurs)
-
-- Original
-```python
-    def cast_vector(vector: TVector | onp.ndarray, length: int) -> TVector:
-        if not isinstance(vector, tuple):
-            assert cast(onp.ndarray, vector).shape == (
-                length,
-        ), f"Expected vector of shape {(length,)}, but got {vector.shape} instead"
-    return cast(TVector, tuple(map(float, vector)))
-```
-
-- Fix it as follows 
-```python 
-    def cast_vector(vector: TVector | onp.ndarray, length: int) -> TVector:
-        if isinstance(vector, tuple): return cast(TVector, vector)
-        else:
-            if vector.__class__.__name__ == 'RollPitchYaw':
-                x = vector.roll 
-                y = vector.pitch 
-                z = vector.yaw
-            return cast(TVector, (x, y, z))
-        else:
-            vector = tuple(vector)
-            return cast(TVector, vector)
-```
-
-
-
-
+- **Note** sorry for the confusion, the previous instruction for the '_message_api.py' can be resolved with viser==0.1.29 
 
 ## Usage
 - View a 2D GS ply file 
@@ -101,6 +70,25 @@ python viewer.py <path to pre-trained model> <or direct path to the ply file> --
 - Train w/ viewer
 ```bash
 python train_w_viewer.py -s <path to datas>
+```
+- Colab
+    - You can also use the viewer in the Colab, powered by ngrok (see [example](./2dgs_viewer_colab.ipynb))
+    - To use Colab and ngrok, you should add the below code to the 'start' function in the 'viewer.py' (line 246)
+```python
+    def start(self, block: bool = True, server_config_fun=None, tab_config_fun=None):
+        # create viser server
+        server = viser.ViserServer(host=self.host, port=self.port)
+        self._setup_titles(server)
+        if server_config_fun is not None:
+            server_config_fun(self, server)
+
+        ### attach here!!!
+        from pyngrok import ngrok
+        authtoken = "your authtoken"
+        ngrok.set_auth_token(authtoken)
+        public_url = ngrok.connect(self.port)
+        print(f"ngrok tunnel URL: {public_url}")
+        ### 
 ```
 
 ### Control 
