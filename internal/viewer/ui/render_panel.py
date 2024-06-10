@@ -637,48 +637,49 @@ class RenderPanel:
             @self.preview_frame_slider.on_update
             def _(_) -> None:
                 max_frame_index = int(self.framerate_number.value * self.duration_number.value) - 1
-                maybe_pose_and_fov = camera_path.interpolate_pose_and_fov(
-                    self.preview_frame_slider.value / max_frame_index if max_frame_index > 0 else 0
-                )
-                if maybe_pose_and_fov is None:
-                    return
-                pose, fov, model_sizes, model_poses = maybe_pose_and_fov
-                server.add_camera_frustum(
-                    "/preview_camera",
-                    fov=fov,
-                    aspect=resolution.value[0] / resolution.value[1],
-                    scale=0.35,
-                    wxyz=pose.rotation().wxyz,
-                    position=pose.translation(),
-                    color=(10, 200, 30),
-                    # Hack: hide green frustum if the viewport is attached.
-                    # This is a waste of bandwidth, but will ensure that any old
-                    # frustums are removed/aren't rendered.
-                    #
-                    # Easy to fix with a global variable.
-                    visible=not attach_viewport_checkbox.value,
-                )
+                if not self.play_preview:
+                    maybe_pose_and_fov = camera_path.interpolate_pose_and_fov(
+                        self.preview_frame_slider.value / max_frame_index if max_frame_index > 0 else 0
+                    )
+                    if maybe_pose_and_fov is None:
+                        return
+                    pose, fov, model_sizes, model_poses = maybe_pose_and_fov
+                    server.add_camera_frustum(
+                        "/preview_camera",
+                        fov=fov,
+                        aspect=resolution.value[0] / resolution.value[1],
+                        scale=0.35,
+                        wxyz=pose.rotation().wxyz,
+                        position=pose.translation(),
+                        color=(10, 200, 30),
+                        # Hack: hide green frustum if the viewport is attached.
+                        # This is a waste of bandwidth, but will ensure that any old
+                        # frustums are removed/aren't rendered.
+                        #
+                        # Easy to fix with a global variable.
+                        visible=not attach_viewport_checkbox.value,
+                    )
 
-                def apply_transform():
-                    for model_idx in range(len(model_sizes)):
-                        viewer.gaussian_model.transform_with_vectors(
-                            model_idx,
-                            scale=model_sizes[model_idx],
-                            r_wxyz=model_poses[model_idx]["wxyz"],
-                            t_xyz=model_poses[model_idx]["position"],
-                        )
-                        viewer.transform_panel.set_model_transform_control_value(model_idx, model_poses[model_idx]["wxyz"], model_poses[model_idx]["position"])
+                    def apply_transform():
+                        for model_idx in range(len(model_sizes)):
+                            viewer.gaussian_model.transform_with_vectors(
+                                model_idx,
+                                scale=model_sizes[model_idx],
+                                r_wxyz=model_poses[model_idx]["wxyz"],
+                                t_xyz=model_poses[model_idx]["position"],
+                            )
+                            viewer.transform_panel.set_model_transform_control_value(model_idx, model_poses[model_idx]["wxyz"], model_poses[model_idx]["position"])
 
-                if attach_viewport_checkbox.value:
-                    for client in server.get_clients().values():
-                        client.camera.wxyz = pose.rotation().wxyz
-                        client.camera.position = pose.translation()
-                        client.camera.fov = fov
-                    if apply_transform_checkbox:
+                    if attach_viewport_checkbox.value:
+                        for client in server.get_clients().values():
+                            client.camera.wxyz = pose.rotation().wxyz
+                            client.camera.position = pose.translation()
+                            client.camera.fov = fov
+                        if apply_transform_checkbox:
+                            apply_transform()
+                    elif apply_transform_checkbox.value:
                         apply_transform()
-                elif apply_transform_checkbox.value:
-                    apply_transform()
-                    viewer.rerender_for_all_client()
+                        viewer.rerender_for_all_client()
 
             return self.preview_frame_slider
 
@@ -861,6 +862,34 @@ class RenderPanel:
         def _(event: viser.GuiEvent) -> None:
             make_cameras(event)
             self.play_preview=True
+            self.preview_button.visible = False 
+            self.preview_pause.visible = True 
+            self.STOP.visible = True 
+
+        self.preview_pause = server.add_gui_button(
+            "Preview pause", 
+            color="red",
+            icon = viser.Icon.PLAYER_PAUSE,
+            visible=False,
+        )
+        @self.preview_pause.on_click
+        def _(event: viser.GuiEvent) -> None:
+            make_cameras(event)
+            self.preview_pause.visible = False 
+            self.preview_button.visible = True
+
+        self.STOP = server.add_gui_button(
+            "STOP", 
+            color="red",
+            icon = viser.Icon.PLAYER_STOP,
+            visible=False,
+        )
+        @self.STOP.on_click
+        def _(event: viser.GuiEvent) -> None:
+            make_cameras(event)
+            self.STOP.visible = False
+            self.preview_pause.visible = False 
+            self.preview_button.visible = True
 
         camera_path = CameraPath(server, viewer)
         camera_path.default_fov = fov_degrees.value / 180.0 * onp.pi

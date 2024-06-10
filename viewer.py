@@ -280,7 +280,6 @@ class Viewer:
         # register hooks
         server.on_client_connect(self._handle_new_client)
         server.on_client_disconnect(self._handle_client_disconnect)
-
         if block is True:
             while True:
                 time.sleep(999)
@@ -294,8 +293,8 @@ class Viewer:
             ),
             TitlebarButton(
                 text="Hwan Heo",
-                icon="Keyboard",
-                href="https://www.linkedin.com/in/hwan-heo-0905korea",
+                icon="GitHub",
+                href="https://github.com/hwanhuh",
             ),
         )
         image = TitlebarImage(
