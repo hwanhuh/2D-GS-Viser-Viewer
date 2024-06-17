@@ -46,6 +46,55 @@ class ClientThread(threading.Thread):
                 with self.client.atomic():
                     self.render_trigger.set()
 
+    def get_RT(self, wxyz, position):
+        R = vtf.SO3(wxyz=wxyz)
+        R = R @ vtf.SO3.from_x_radians(np.pi)
+        R = torch.tensor(R.as_matrix())
+        pos = torch.tensor(position, dtype=torch.float64)
+        c2w = torch.eye(4)
+        c2w[:3, :3] = R
+        c2w[:3, 3] = pos
+
+        c2w = torch.matmul(self.viewer.camera_transform, c2w)
+        c2w[:3, 1:3] *= -1
+
+        w2c = torch.linalg.inv(c2w)
+        R = w2c[:3, :3]
+        T = w2c[:3, 3]
+
+        return R, T
+
+    def make_camera(self, cam, ptc_mode=False):
+        max_res = self.viewer.max_res_when_static.value
+        image_height = max_res
+        image_width = int(image_height * cam.aspect)
+        
+        if image_width > max_res:
+            image_width = max_res
+            image_height = int(image_width / cam.aspect)
+
+        if ptc_mode:
+            return image_width, image_height
+    
+        fx = torch.tensor([fov2focal(cam.fov, max_res)], dtype=torch.float)
+        R, T = self.get_RT(self.client.camera.wxyz, self.client.camera.position)
+
+        return Cameras(
+            R=R.unsqueeze(0),
+            T=T.unsqueeze(0),
+            fx=fx,
+            fy=fx,
+            cx=torch.tensor([(image_width // 2)], dtype=torch.int),
+            cy=torch.tensor([(image_height // 2)], dtype=torch.int),
+            width=torch.tensor([image_width], dtype=torch.int),
+            height=torch.tensor([image_height], dtype=torch.int),
+            appearance_id=torch.tensor([0], dtype=torch.int),
+            normalized_appearance_id=torch.tensor([0.], dtype=torch.float),
+            time=torch.tensor([0], dtype=torch.float),
+            distortion_params=None,
+            camera_type=torch.tensor([0], dtype=torch.int),
+        )[0].to_device(self.viewer.device)
+
     def render_image(self, camera):
         valid_range = None
         if self.viewer.enable_crop.value:
@@ -63,21 +112,34 @@ class ClientThread(threading.Thread):
             render_type2 = self.viewer.render_type_name[self.viewer.render_type2.value], 
         )
 
+    def render_image_from_paths(self, path, camera_params):
+        # Construct camera
+        R, T = self.get_RT(path["wxyz"], path["position"])
+        camera = Cameras(
+            R=R.unsqueeze(0),
+            T=T.unsqueeze(0),
+            **camera_params
+        )[0].to_device(self.viewer.device)
+        
+        with torch.no_grad():
+            image = self.render_image(camera)
+            image = torch.clamp(image, max=1.)
+            image = torch.permute(image, (1, 2, 0))
+
+        return image 
+
     def send_camera_path(self, camera_paths, fps=30):
         # calculate default camera information
-        fov = self.last_camera.fov
-        aspect_ratio = self.last_camera.aspect
-
         max_res, jpeg_quality = self.get_render_options()
         image_height = max_res
-        image_width = int(image_height * aspect_ratio)
+        image_width = int(image_height * self.last_camera.aspect)
         if image_width > max_res:
             image_width = max_res
-            image_height = int(image_width / aspect_ratio)
+            image_height = int(image_width / self.last_camera.aspect)
 
         camera_params = {
-            'fx': torch.tensor([fov2focal(fov, max_res)], dtype=torch.float),
-            'fy': torch.tensor([fov2focal(fov, max_res)], dtype=torch.float), 
+            'fx': torch.tensor([fov2focal(self.last_camera.fov, max_res)], dtype=torch.float),
+            'fy': torch.tensor([fov2focal(self.last_camera.fov, max_res)], dtype=torch.float), 
             'cx': torch.tensor([(image_width // 2)], dtype=torch.int),
             'cy': torch.tensor([(image_height // 2)], dtype=torch.int),
             'width': torch.tensor([image_width], dtype=torch.int),
@@ -88,50 +150,23 @@ class ClientThread(threading.Thread):
             'distortion_params': None,
             'camera_type': torch.tensor([0], dtype=torch.int)
         }
-        
-        framenum = 0 
+
+        framenum = self.viewer.render_panel.preview_frame_slider.value
         while framenum < len(camera_paths) and self.viewer.render_panel.STOP.visible:
             with self.client.atomic():
                 if self.viewer.render_panel.preview_pause.visible:
-                    # Construct camera
-                    path = camera_paths[framenum]
-                    R = vtf.SO3(wxyz=path["wxyz"])
-                    R = R @ vtf.SO3.from_x_radians(np.pi)
-                    R = torch.tensor(R.as_matrix())
-                    pos = torch.tensor(path["position"], dtype=torch.float64)
-                    c2w = torch.eye(4)
-                    c2w[:3, :3] = R
-                    c2w[:3, 3] = pos
-
-                    c2w = torch.matmul(self.viewer.camera_transform, c2w)
-                    c2w[:3, 1:3] *= -1
-
-                    w2c = torch.linalg.inv(c2w)
-                    R = w2c[:3, :3]
-                    T = w2c[:3, 3]
-                    
-                    camera = Cameras(
-                        R=R.unsqueeze(0),
-                        T=T.unsqueeze(0),
-                        **camera_params
-                    )[0].to_device(self.viewer.device)
-                    
                     self.viewer.render_panel.preview_frame_slider.value = framenum
+                    image = self.render_image_from_paths(camera_paths[framenum], camera_params)
                     framenum += 1
-                    with torch.no_grad():
-                        self.viewer.gpu_mem.value = self.viewer.get_gpu_memory_usage()
-                        image = self.render_image(camera)
-                        image = torch.clamp(image, max=1.)
-                        image = torch.permute(image, (1, 2, 0))
-                        self.client.set_background_image(
-                            image.cpu().numpy(),
-                            format=self.viewer.image_format,
-                            jpeg_quality=jpeg_quality,
-                        )
+                    self.client.set_background_image(
+                        image.cpu().numpy(),
+                        format=self.viewer.image_format,
+                        jpeg_quality=jpeg_quality,
+                    )
                 else:
                     while not self.viewer.render_panel.preview_pause.visible:
                         time.sleep(1/10)
-            self.render_trigger.set()
+                self.render_trigger.set()
 
     def render_and_send(self):
         start = time.time()
@@ -146,63 +181,14 @@ class ClientThread(threading.Thread):
                     self.viewer.render_panel.preview_button.visible = True
                     self.viewer.render_panel.preview_frame_slider.value = 0
                     self.render_trigger.set()
-                    return
         with self.client.atomic():
-            cam = self.last_camera
             self.last_move_time = time.time()
-
-            # get camera pose
-            R = vtf.SO3(wxyz=self.client.camera.wxyz)
-            R = R @ vtf.SO3.from_x_radians(np.pi)
-            R = torch.tensor(R.as_matrix())
-            pos = torch.tensor(self.client.camera.position, dtype=torch.float64)
-            c2w = torch.eye(4)
-            c2w[:3, :3] = R
-            c2w[:3, 3] = pos
-
-            c2w = torch.matmul(self.viewer.camera_transform, c2w)
-
-            # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
-            c2w[:3, 1:3] *= -1
-
-            # get the world-to-camera transform and set R, T
-            w2c = torch.linalg.inv(c2w)
-            R = w2c[:3, :3]
-            T = w2c[:3, 3]
-
-            # calculate resolution
-            aspect_ratio = cam.aspect
-            max_res, jpeg_quality = self.viewer.max_res_when_static.value, int(self.viewer.jpeg_quality_when_static.value)
-            image_height = max_res
-            image_width = int(image_height * aspect_ratio)
-            if image_width > max_res:
-                image_width = max_res
-                image_height = int(image_width / aspect_ratio)
-
-            # construct camera
-            appearance_id = (0, 0.)
-            fx = torch.tensor([fov2focal(cam.fov, max_res)], dtype=torch.float)
-            camera = Cameras(
-                R=R.unsqueeze(0),
-                T=T.unsqueeze(0),
-                fx=fx,
-                fy=fx,
-                cx=torch.tensor([(image_width // 2)], dtype=torch.int),
-                cy=torch.tensor([(image_height // 2)], dtype=torch.int),
-                width=torch.tensor([image_width], dtype=torch.int),
-                height=torch.tensor([image_height], dtype=torch.int),
-                appearance_id=torch.tensor([appearance_id[0]], dtype=torch.int),
-                normalized_appearance_id=torch.tensor([appearance_id[1]], dtype=torch.float),
-                time=torch.tensor([0], dtype=torch.float),
-                distortion_params=None,
-                camera_type=torch.tensor([0], dtype=torch.int),
-            )[0].to_device(self.viewer.device)
-
             with torch.no_grad():
-                self.viewer.gpu_mem.value = self.viewer.get_gpu_memory_usage()
                 if hasattr(self.viewer, 'edit_panel') and self.viewer.edit_panel.show_point_cloud_checkbox.value:
+                    image_width, image_height = self.make_camera(self.last_camera, ptc_mode=True)
                     image = self.viewer.background_color.unsqueeze(dim=1).unsqueeze(dim=2).expand([3, image_height, image_width])
                 else:
+                    camera = self.make_camera(self.last_camera)
                     image = self.render_image(camera)
                     image = torch.clamp(image, max=1.)
 
@@ -210,10 +196,11 @@ class ClientThread(threading.Thread):
                 self.client.set_background_image(
                     image.cpu().numpy(),
                     format=self.viewer.image_format,
-                    jpeg_quality=jpeg_quality,
+                    jpeg_quality=int(self.viewer.jpeg_quality_when_static.value),
                 )
         end = time.time()
         self.viewer.fps.value = f'{(1 / (end-start)):.1f} frame/sec'
+        self.viewer.gpu_mem.value = self.viewer.get_gpu_memory_usage()
 
     def run(self):
         while True:

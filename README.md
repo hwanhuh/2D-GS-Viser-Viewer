@@ -16,6 +16,9 @@ A significant portion of this project is built upon several existing works to pr
 | <img src="assets/viser_general_opt.gif" width="300"/> | <img src="assets/viser_edit_opt.gif" width="300"/> | <img src="assets/viser_transform_opt.gif" width="300"/> |
 
 ## Updates History
+- 2024/06/17
+    - Improve fps
+    - Minor code revision
 - 2024/06/07
     - Render Types Update
         - Now supports ***Edge/Curvature/Depth-Distortion*** render type

@@ -327,14 +327,15 @@ class Viewer:
                         initial_value = ' frame/sec'
                     )
             else:
-                self.gpu_mem = server.add_gui_text(
-                    'Memory Usage',
-                    initial_value = self.get_gpu_memory_usage()
-                )
-                self.fps = server.add_gui_text(
-                    'fps',
-                    initial_value = ' frame/sec'
-                )
+                with server.add_gui_folder("Status"):
+                    self.gpu_mem = server.add_gui_text(
+                        'Memory Usage',
+                        initial_value = self.get_gpu_memory_usage()
+                    )
+                    self.fps = server.add_gui_text(
+                        'fps',
+                        initial_value = ' frame/sec'
+                    )
             with server.add_gui_folder("Render Options"):
                 self.max_res_when_static = server.add_gui_slider(
                     "Max Res",

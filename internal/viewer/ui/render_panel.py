@@ -594,8 +594,8 @@ class RenderPanel:
 
         playback_folder = server.add_gui_folder("Playback")
         with playback_folder:
-            self.duration_number = server.add_gui_number("Duration (sec)", min=0.0, max=1e8, step=0.0001, initial_value=4.0)
-            self.framerate_number = server.add_gui_number("Frame rate (FPS)", min=0.1, max=240.0, step=1e-8, initial_value=30.0)
+            self.duration_number = server.add_gui_number("Duration (sec)", min=0.0, max=1e8, step=0.1, initial_value=4.0)
+            self.framerate_number = server.add_gui_number("Frame rate (FPS)", min=0.1, max=240.0, step=1, initial_value=30.0)
             framerate_buttons = server.add_gui_button_group("", ("24", "30", "60"))
 
             @framerate_buttons.on_click
