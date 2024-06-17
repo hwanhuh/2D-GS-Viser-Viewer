@@ -19,6 +19,7 @@ class EditPanel:
         self.server = server
         self.viewer = viewer
         self.tab = tab
+        self.C0 = 0.28209479177387814
 
         self._setup_point_cloud_folder()
         self._setup_gaussian_edit_folder()
@@ -28,15 +29,8 @@ class EditPanel:
         server = self.server
         with self.server.add_gui_folder("Point Cloud"):
             self.show_point_cloud_checkbox = server.add_gui_checkbox(
-                "use Edit",
+                "on Edit Mode",
                 initial_value=False,
-            )
-            self.point_cloud_color = server.add_gui_vector3(
-                "Point Color",
-                min=(0, 0, 0),
-                max=(255, 255, 255),
-                step=1,
-                initial_value=(0, 0, 255),
             )
             self.point_size = server.add_gui_number(
                 "Point Size",
@@ -51,7 +45,6 @@ class EditPanel:
             self.pcd = None
 
             @self.show_point_cloud_checkbox.on_update
-            @self.point_cloud_color.on_update
             @self.point_size.on_update
             @self.point_sparsify.on_update
             def _(event: viser.GuiEvent):
@@ -161,6 +154,8 @@ class EditPanel:
                 self.edit_histories.append(pose_and_size_list)
                 self.viewer.gaussian_model.delete_gaussians(gaussian_to_be_deleted)
                 self._update_pcd()
+            self.viewer.viewer_renderer.gaussian_model = self.viewer.gaussian_model
+            self.viewer.viewer_renderer.update_pc_features()
             self.viewer.rerender_for_all_client()
 
     def _setup_save_gaussian_folder(self):
@@ -263,10 +258,15 @@ class EditPanel:
         if self.show_point_cloud_checkbox.value is False:
             return
         xyz = self.viewer.gaussian_model.get_xyz
-        colors = torch.tensor([self.point_cloud_color.value], dtype=torch.uint8, device=xyz.device).repeat(xyz.shape[0], 1)
+
+        # get SH0 colors
+        dc = self.viewer.gaussian_model._features_dc.clone() 
+        dc = (self.C0 * dc + 0.5).clip(min=0.0, max=1.0)
+        dc = (255 * dc[:, 0]).to(torch.uint8)
+        colors = dc
         if selected_gaussians_indices is None:
             selected_gaussians_indices = self._get_selected_gaussians_indices()
-        colors[selected_gaussians_indices] = 255 - torch.tensor(self.point_cloud_color.value).to(colors)
+        colors[selected_gaussians_indices] = 255 - colors[selected_gaussians_indices]
 
         point_sparsify = int(self.point_sparsify.value)
         self.show_point_cloud(xyz[::point_sparsify].cpu().detach().numpy(), colors[::point_sparsify].cpu().detach().numpy())
