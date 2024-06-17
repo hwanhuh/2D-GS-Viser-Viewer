@@ -15,9 +15,7 @@ def gradient_map(image):
     grad_y = torch.cat([F.conv2d(image[i].unsqueeze(0), sobel_y, padding=1) for i in range(image.shape[0])])
     
     # gradient magnitude
-    magnitude = torch.sqrt(grad_x ** 2 + grad_y ** 2)
-    magnitude = magnitude.norm(dim=0, keepdim=True)
-
+    magnitude = torch.sqrt(grad_x ** 2 + grad_y ** 2).norm(dim=0, keepdim=True)
     return magnitude
 
 def color_map(map, cmap="turbo"):
@@ -28,27 +26,36 @@ def color_map(map, cmap="turbo"):
     return map
 
 class ViewerRenderer:
-    def __init__(
-            self,
-            gaussian_model,
-            pipe,
-            background_color,
-            
-    ):
+    def __init__(self,
+                gaussian_model,
+                pipe,
+                background_color):
         super().__init__()
         self.gaussian_model = gaussian_model
         self.pipe = pipe
         self.background_color = background_color
+        self.update_pc_features()
+
+    def update_pc_features(self):
+        self.means3D = self.gaussian_model.get_xyz
+        self.all_ids = torch.ones(self.means3D.shape[0], dtype=torch.bool, device=self.means3D.device)
+        screenspace_points = torch.zeros_like(self.means3D, dtype=self.means3D.dtype, requires_grad=True, device="cuda") + 0
+        try:
+            screenspace_points.retain_grad()
+        except:
+            pass
+        self.means2D = screenspace_points
+        self.opacity = self.gaussian_model.get_opacity
+        self.scales = self.gaussian_model.get_scaling
+        self.rotations = self.gaussian_model.get_rotation
+        self.shs = self.gaussian_model.get_features
 
     def render_viewer(self,
                     viewpoint_camera, 
-                    pc : GaussianModel, 
-                    pipe, 
                     bg_color : torch.Tensor, 
-                    scaling_modifier = 1.0, 
-                    show_ptc: bool=False,
-                    point_size = 0.001,
-                    override_color = None, 
+                    scaling_modifier: float = 1.0, 
+                    show_ptc: bool = False,
+                    point_size: float = 0.001,
                     valid_range = None):
         """
         Render the scene. 
@@ -67,78 +74,31 @@ class ViewerRenderer:
             scale_modifier=scaling_modifier,
             viewmatrix=viewpoint_camera.world_to_camera,
             projmatrix=viewpoint_camera.full_projection,
-            sh_degree=pc.active_sh_degree,
+            sh_degree=self.gaussian_model.active_sh_degree,
             campos=viewpoint_camera.camera_center,
             prefiltered=False,
             debug=False,
         )
         rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
-        # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
-        means3D = pc.get_xyz
-        screenspace_points = torch.zeros_like(means3D, dtype=means3D.dtype, requires_grad=True, device="cuda") + 0
-        try:
-            screenspace_points.retain_grad()
-        except:
-            pass
-        means2D = screenspace_points
-        opacity = pc.get_opacity
-        opacity = pc.get_opacity
-
-        scales = None
-        rotations = None
-        cov3D_precomp = None
-        if pipe.compute_cov3D_python:
-            # currently don't support normal consistency loss if use precomputed covariance
-            splat2world = pc.get_covariance(scaling_modifier)
-            W, H = viewpoint_camera.image_width, viewpoint_camera.image_height
-            near, far = viewpoint_camera.znear, viewpoint_camera.zfar
-            ndc2pix = torch.tensor([
-                [W / 2, 0, 0, (W-1) / 2],
-                [0, H / 2, 0, (H-1) / 2],
-                [0, 0, far-near, near],
-                [0, 0, 0, 1]]).float().cuda().T
-            world2pix =  viewpoint_camera.full_proj_transform @ ndc2pix
-            cov3D_precomp = (splat2world[:, [0,1,3]] @ world2pix[:,[0,1,3]]).permute(0,2,1).reshape(-1, 9) # column major
-        else:
-            scales = pc.get_scaling
-            rotations = pc.get_rotation
-        
-        pipe.convert_SHs_python = False
-        shs = None
-        colors_precomp = None
-        if override_color is None:
-            if pipe.convert_SHs_python:
-                shs_view = pc.get_features.transpose(1, 2).view(-1, 3, (pc.max_sh_degree+1)**2)
-                dir_pp = (pc.get_xyz - viewpoint_camera.camera_center.repeat(pc.get_features.shape[0], 1))
-                dir_pp_normalized = dir_pp/dir_pp.norm(dim=1, keepdim=True)
-                sh2rgb = eval_sh(pc.active_sh_degree, shs_view, dir_pp_normalized)
-                colors_precomp = torch.clamp_min(sh2rgb + 0.5, 0.0)
-            else:
-                shs = pc.get_features
-        else:
-            colors_precomp = override_color
-
-        if show_ptc:
-            scales = torch.full(scales.shape, point_size).to(scales.device)
-
+        scales = torch.full(self.scales.shape, point_size).to(self.scales.device) if show_ptc else self.scales
         if valid_range is not None:
-            is_x_in_range = (valid_range[0][0] <= means3D[:, 0]) & (means3D[:, 0] <= valid_range[0][1])
-            is_y_in_range = (valid_range[1][0] <= means3D[:, 1]) & (means3D[:, 1] <= valid_range[1][1])
-            is_z_in_range = (valid_range[2][0] <= means3D[:, 2]) & (means3D[:, 2] <= valid_range[2][1])
+            is_x_in_range = (valid_range[0][0] <= self.means3D[:, 0]) & (self.means3D[:, 0] <= valid_range[0][1])
+            is_y_in_range = (valid_range[1][0] <= self.means3D[:, 1]) & (self.means3D[:, 1] <= valid_range[1][1])
+            is_z_in_range = (valid_range[2][0] <= self.means3D[:, 2]) & (self.means3D[:, 2] <= valid_range[2][1])
             is_in_box = is_x_in_range & is_y_in_range & is_z_in_range
         else:
-            is_in_box = torch.ones(means3D.shape[0], dtype=torch.bool, device=means3D.device)
+            is_in_box = self.all_ids
 
         rendered_image, radii, allmap = rasterizer(
-            means3D = means3D[is_in_box],
-            means2D = means2D[is_in_box],
-            shs = shs[is_in_box],
-            colors_precomp = colors_precomp,
-            opacities = opacity[is_in_box],
+            means3D = self.means3D[is_in_box],
+            means2D = self.means2D[is_in_box],
+            shs = self.shs[is_in_box],
+            colors_precomp = None,
+            opacities = self.opacity[is_in_box],
             scales = scales[is_in_box],
-            rotations = rotations[is_in_box],
-            cov3D_precomp = cov3D_precomp
+            rotations = self.rotations[is_in_box],
+            cov3D_precomp = None
         )
         
         # get normal map & transform normal from view space to world space
@@ -156,7 +116,7 @@ class ViewerRenderer:
         
         # get depth distortion map & depth map & depth-to-normal map 
         render_dist = allmap[6:7]
-        surf_depth = render_depth_expected * (1-pipe.depth_ratio) + (pipe.depth_ratio) * render_depth_median
+        surf_depth = render_depth_expected * (1-self.pipe.depth_ratio) + (self.pipe.depth_ratio) * render_depth_median
         surf_normal = depth_to_normal(viewpoint_camera, surf_depth)
         surf_normal = surf_normal.permute(2, 0, 1)
         surf_normal = surf_normal * (render_alpha).detach()
@@ -184,9 +144,9 @@ class ViewerRenderer:
                     slider: float=0.5,
                     show_ptc: bool=False,
                     point_size: float=0.1,
-                    render_type = "render",
-                    render_type1 = "render", 
-                    render_type2 = "render", 
+                    render_type: str="render",
+                    render_type1: str="render", 
+                    render_type2: str="render", 
                     ):
         def get_result(results, type):
             if type in results.keys():
@@ -197,22 +157,22 @@ class ViewerRenderer:
                 return color_map(gradient_map(results['render']))
             else:
                 return results['render']
+
         results = self.render_viewer(camera, 
-                        self.gaussian_model,
-                        self.pipe,
-                        self.background_color,
-                        scaling_modifier, 
-                        valid_range = valid_range,
-                        show_ptc = show_ptc, 
-                        point_size = point_size, 
-                        )
+                                    self.background_color,
+                                    scaling_modifier, 
+                                    valid_range = valid_range,
+                                    show_ptc = show_ptc, 
+                                    point_size = point_size, 
+                                    )
         if not split: 
             return get_result(results, render_type)
         else:
             result = torch.zeros_like(results['render'])
             _, _, render_h = result.shape
-            result[:, :, :int(render_h * slider)] = get_result(results, render_type1)[:, :, :int(render_h * slider)]
-            result[:, :, int(render_h * slider):] = get_result(results, render_type2)[:, :, int(render_h * slider):]
-            result[:, :, int(render_h * slider)] = torch.ones_like(result[:, :, int(render_h * slider)])
+            slider_pos = int(render_h * slider)
+            result[:, :, :slider_pos] = get_result(results, render_type1)[:, :, :slider_pos]
+            result[:, :, slider_pos:] = get_result(results, render_type2)[:, :, slider_pos:]
+            result[:, :, slider_pos] = torch.ones_like(result[:, :, slider_pos])
 
             return result
