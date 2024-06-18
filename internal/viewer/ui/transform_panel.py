@@ -195,6 +195,8 @@ class TransformPanel:
             r_wxyz=model_pose.wxyz,
             t_xyz=model_pose.position,
         )
+        self.viewer.viewer_renderer.gaussian_model = self.viewer.gaussian_model
+        self.viewer.viewer_renderer.update_pc_features()
 
     def _make_t_xyz_text_callback(
             self,
