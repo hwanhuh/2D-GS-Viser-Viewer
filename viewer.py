@@ -5,8 +5,12 @@ import time
 import json
 import torch
 import numpy as np
+import trimesh
 import viser
 import viser.transforms as vtf
+import threading
+import warnings 
+warnings.filterwarnings('ignore')
 
 from pathlib import Path
 from argparse import ArgumentParser
@@ -14,20 +18,20 @@ from typing import Tuple, Literal, List
 from viser.theme import TitlebarButton, TitlebarConfig, TitlebarImage
 
 from arguments import ModelParams, PipelineParams, get_combined_args
-from utils.mesh_utils import GaussianExtractor
-
-from viewer_model import GaussianModelforViewer as GaussianModel
-from viewer_renderer import ViewerRenderer
+from internal.viewer import GaussianModelforViewer as GaussianModel
+from internal.viewer import ViewerRenderer
 from internal.viewer import ClientThread
+from internal.viewer import MeshExporter
 from internal.viewer.ui import RenderPanel, TransformPanel, EditPanel
-from internal.viewer.ui.up_direction_folder import UpDirectionFolder
 
 DROPDOWN_USE_DIRECT_APPEARANCE_EMBEDDING_VALUE = "@Direct"
 
 class Viewer:
     def __init__(
             self,
+            args, 
             model_paths: str,
+            source_path: str,
             host: str = "0.0.0.0",
             port: int = 8080,
             background_color: Tuple = (0.5, 0.5, 0.5),
@@ -47,6 +51,7 @@ class Viewer:
             from_direct_path: str = None, 
             is_training: bool = False,
     ):
+        self.args = args
         self.device = torch.device("cuda")
         self.render_type_name = {
             "RGB": 'render', 
@@ -60,6 +65,8 @@ class Viewer:
             "Depth-to-Curvature": 'curvature',
             "None": 'render',
         }
+        self.source_path = source_path
+        self.exporting = False 
         self.host = host
         self.port = port
         self.background_color = torch.tensor(background_color, dtype=torch.float32, device="cuda")
@@ -77,39 +84,31 @@ class Viewer:
         self.is_training = is_training
         self.show_edit_panel = ~no_edit_panel
         self.show_render_panel = ~no_render_panel
-
-        self._initialize_pipeline_params()
-        self._initialize_models(model_paths, iterations)
-
-        if cameras_json is None:
-            cameras_json = os.path.join(self.model_paths, "cameras.json")
-        self.camera_transform = self._reorient_camera(cameras_json, reorient, up)
-        self.camera_poses = self._init_camera_poses(cameras_json)
+        self._init_models(model_paths, iterations)
+        self.cameras_json = os.path.join(self.model_paths, "cameras.json") if cameras_json is None else cameras_json
+        self.camera_transform = self._get_scene_camera_transform(self.cameras_json, reorient, up)
+        self.camera_poses = self._init_camera_poses(self.cameras_json)
         self.clients = {}
+        
 
-    def _initialize_pipeline_params(self):
-        parser = ArgumentParser(description="Viewer Parameters")
-        self.pipe = PipelineParams(parser)
-
-    def _initialize_models(self, model_paths, iterations):
+    def _init_models(self, model_paths, iterations):
         # init gaussian model & renderer
         self.gaussian_model = GaussianModel(sh_degree=self.sh_degree)
         self.model_paths = model_paths[0]
         if not self.is_training:
-            self.ply_path = self._get_ply_path(iterations)
+            self.iteration = iterations
+            if not self.model_paths.lower().endswith('.ply'):
+                self.ply_path = os.path.join(self.model_paths, "point_cloud", f"iteration_{iterations}", "point_cloud.ply")
+            else:
+                self.ply_path = self.model_paths
             if not os.path.exists(self.ply_path):
                 print(self.ply_path)
                 raise FileNotFoundError
             print('[INFO] ply path loaded from:', self.ply_path)
             self.gaussian_model.load_ply(self.ply_path)
-        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.pipe, self.background_color)
+        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.background_color)
 
-    def _get_ply_path(self, iterations):
-        if not self.model_paths.lower().endswith('.ply'):
-            return os.path.join(self.model_paths, "point_cloud", f"iteration_{iterations}", "point_cloud.ply")
-        return self.model_paths
-
-    def _reorient_camera(self, cameras_json_path, mode, up):
+    def _get_scene_camera_transform(self, cameras_json_path, mode, up):
         transform = torch.eye(4, dtype=torch.float)
 
         if mode == "disable":
@@ -155,35 +154,7 @@ class Viewer:
         self.gaussian_model._rotation = new_gaussians._rotation.clone().detach()
         self.gaussian_model._features_dc = new_gaussians._features_dc.clone().detach()
         self.gaussian_model._features_rest = new_gaussians._features_rest.clone().detach()
-        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.pipe, self.background_color)
-
-    def _reorient(self, cameras_json_path: str, mode: str):
-        transform = torch.eye(4, dtype=torch.float)
-
-        if mode == "disable":
-            return transform
-
-        # detect whether cameras.json exists
-        is_cameras_json_exists = os.path.exists(cameras_json_path)
-
-        if is_cameras_json_exists is False:
-            if mode == "enable":
-                raise RuntimeError("{} not exists".format(cameras_json_path))
-            else:
-                return transform
-
-        print("load {}".format(cameras_json_path))
-        with open(cameras_json_path, "r") as f:
-            cameras = json.load(f)
-        up = torch.zeros(3)
-        for i in cameras:
-            up += torch.tensor(i["rotation"])[:3, 1]
-        up = -up / torch.linalg.norm(up)
-
-        print("up vector = {}".format(up))
-        self.up_direction = up.numpy()
-
-        return transform
+        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.background_color)
 
     def load_camera_poses(self, cameras_json_path: str):
         if os.path.exists(cameras_json_path) is False:
@@ -260,6 +231,11 @@ class Viewer:
         if self.show_edit_panel:
             with tabs.add_tab("Edit") as edit_tab:
                 self.edit_panel = EditPanel(server, self, edit_tab)
+                @self.edit_panel.show_point_cloud_checkbox.on_update
+                @self.edit_panel.show_mesh_button.on_click 
+                @self.edit_panel.unshow_mesh_button.on_click
+                def _(event): 
+                    with server.atomic(): self._handle_option_updated(_)
 
         self.transform_panel: TransformPanel = None
         if self.enable_transform:
@@ -275,15 +251,15 @@ class Viewer:
                                                 orientation_transform=torch.linalg.inv(self.camera_transform).cpu().numpy(),
                                                 enable_transform=self.enable_transform,
                                                 background_color=self.background_color.detach().cpu().numpy().tolist(),
-                                                sh_degree=self.sh_degree,
-                )
+                                                sh_degree=self.sh_degree,)
+                
         # register hooks
         server.on_client_connect(self._handle_new_client)
         server.on_client_disconnect(self._handle_client_disconnect)
         if block is True:
             while True:
                 time.sleep(999)
-
+    
     def _setup_titles(self, server):
         buttons = (
             TitlebarButton(
@@ -336,7 +312,7 @@ class Viewer:
                         'fps',
                         initial_value = ' frame/sec'
                     )
-            with server.add_gui_folder("Render Options"):
+            with server.add_gui_folder("Image Options"):
                 self.max_res_when_static = server.add_gui_slider(
                     "Max Res",
                     min=128,
@@ -345,6 +321,13 @@ class Viewer:
                     initial_value=1920,
                 )
                 self.max_res_when_static.on_update(self._handle_option_updated)
+                self.max_res_when_moving = server.add_gui_slider(
+                    "(when Move)",
+                    min=128,
+                    max=1920,
+                    step=128,
+                    initial_value=1024,
+                )
                 self.jpeg_quality_when_static = server.add_gui_slider(
                     "JPEG Quality",
                     min=0,
@@ -354,89 +337,77 @@ class Viewer:
                 )
                 self.jpeg_quality_when_static.on_update(self._handle_option_updated)
 
-                self.max_res_when_moving = server.add_gui_slider(
-                    "Max Res when Moving",
-                    min=128,
-                    max=1920,
-                    step=128,
-                    initial_value=1024,
-                )
                 self.jpeg_quality_when_moving = server.add_gui_slider(
-                    "JPEG Quality when Moving",
+                    "(when Move)",
                     min=0,
                     max=100,
                     step=1,
                     initial_value=60,
                 )
 
+            with server.add_gui_folder("Render Options"):
                 self.render_type = server.add_gui_dropdown(
                     "Render Type", tuple(self.render_type_name.keys())[:-1]
                 )
-                @self.render_type.on_update
-                def _(event): 
-                    with server.atomic(): self._handle_option_updated(_)
-
-                # add cameras
-                if self.show_cameras:
-                    self.add_cameras_to_scene(server)
-
-            with server.add_gui_folder("Split Mode"):
-                self.enable_split = server.add_gui_checkbox(
-                    "use Split",
-                    initial_value=False,
-                )
-                self.mode_slider = server.add_gui_slider(
-                    "Split Slider",
+                self.depth_ratio_slider = server.add_gui_slider(
+                    "Depth Ratio (mean ~ med)",
                     min=0.,
-                    max=0.99,
-                    step=0.01,
-                    initial_value=0.5,
+                    max=1.,
+                    step=0.1,
+                    initial_value=0.,
                 )
-                self.mode_slider.on_update(self._handle_option_updated)
+            
+                with server.add_gui_folder("screen split"):
+                    self.enable_split = server.add_gui_checkbox(
+                        "use Split",
+                        initial_value=False,
+                    )
+                    self.mode_slider = server.add_gui_slider(
+                        "Split Slider",
+                        min=0.,
+                        max=0.99,
+                        step=0.01,
+                        initial_value=0.5,
+                    )
 
-                self.render_type1 = server.add_gui_dropdown(
-                    "Render Type 1", tuple(self.render_type_name.keys())[:-1]
-                )
-                self.render_type2 = server.add_gui_dropdown(
-                    "Render Type 2", tuple(self.render_type_name.keys())[:-1]
-                )
-                @self.render_type1.on_update
-                def _(event): 
-                    with server.atomic(): self._handle_option_updated(_)
-                @self.render_type2.on_update
-                def _(event): 
-                    with server.atomic(): self._handle_option_updated(_)
-
+                    self.render_type1 = server.add_gui_dropdown(
+                        "Left Type", tuple(self.render_type_name.keys())[:-1]
+                    )
+                    self.render_type2 = server.add_gui_dropdown(
+                        "Right Type", tuple(self.render_type_name.keys())[:-1]
+                    )
+            
             with server.add_gui_folder("Gaussian Model"):
                 self.enable_ptc = server.add_gui_checkbox(
                     "as Pointcloud",
                     initial_value=False,
                 )
-                self.point_size = server.add_gui_number(
+                self.point_size = server.add_gui_slider(
                     "Point Size",
                     min=0.001,
-                    initial_value=0.001,
+                    max=0.1,
+                    initial_value=0.01,
+                    step=0.001,
                 )
-                self.point_size.on_update(self._handle_option_updated)
-
-                self.scaling_modifier = server.add_gui_slider(
-                    "Scaling Modifier",
+                self.scaling_modifier_slider = server.add_gui_slider(
+                    "Scaler",
                     min=0.,
                     max=1.,
                     step=0.1,
                     initial_value=1.,
                 )
-                self.scaling_modifier.on_update(self._handle_option_updated)
-
+                
                 if self.viewer_renderer.gaussian_model.max_sh_degree > 0:
                     self.active_sh_degree_slider = server.add_gui_slider(
-                        "Active SH Degree",
+                        "SH Degree",
                         min=0,
                         max=self.viewer_renderer.gaussian_model.max_sh_degree,
                         step=1,
                         initial_value=self.viewer_renderer.gaussian_model.max_sh_degree,
                     )
-                    self.active_sh_degree_slider.on_update(self._handle_activate_sh_degree_slider_updated)
+                    @self.active_sh_degree_slider.on_update
+                    def _(event): 
+                        with server.atomic(): self._handle_option_updated(_)
 
             with server.add_gui_folder("Crop Box"):
                 self.enable_crop = server.add_gui_checkbox(
@@ -464,71 +435,51 @@ class Viewer:
                     step = 0.1,
                     initial_value=[-4.0, 4.0]
                 )
-                self.box_x.on_update(self._handle_option_updated)
-                self.box_y.on_update(self._handle_option_updated)
-                self.box_z.on_update(self._handle_option_updated)
+
+            # add cameras
+            if self.show_cameras:
+                self.add_cameras_to_scene(server)
+
+            @self.render_type.on_update
+            @self.render_type1.on_update
+            @self.render_type2.on_update
+            @self.enable_split.on_update
+            @self.mode_slider.on_update
+            @self.depth_ratio_slider.on_update
+            @self.scaling_modifier_slider.on_update
+            @self.enable_ptc.on_update
+            @self.point_size.on_update
+            @self.enable_crop.on_update
+            @self.box_x.on_update 
+            @self.box_y.on_update 
+            @self.box_z.on_update
+            def _(event): 
+                with server.atomic(): self._handle_option_updated(_)
 
             go_to_scene_center = server.add_gui_button("Go to scene center",)
             @go_to_scene_center.on_click
             def _(event: viser.GuiEvent) -> None:
                 assert event.client is not None
-                event.client.camera.position = self.camera_center + np.asarray([2., 0., 0.])
+                event.client.camera.position = self.camera_center + np.asarray([2.5, 0., 0.])
                 event.client.camera.look_at = self.camera_center
 
-            # self.client_debugger = server.add_gui_checkbox(
-            #     "Client debugger",
-            #     initial_value=False,
-            # )
+                import pdb; pdb.set_trace()
 
-    def _handle_render_type_updated(self, _):
-        if self.render_type.value in self.render_type_name.keys():
-            self.viewer_renderer.render_type = self.render_type_name[self.render_type.value]
-        else:
-            self.viewer_renderer.render_type = self.render_type_name['RGB']
-        self._handle_option_updated(_)
-
-    def _handle_render_type1_updated(self, _):
-        if self.render_type.value in self.render_type_name.keys():
-            self.viewer_renderer.render_type1 = self.render_type_name[self.render_type1.value]
-        else:
-            self.viewer_renderer.render_type1 = self.render_type_name['RGB']
-        self._handle_option_updated(_)
-
-    def _handle_render_type2_updated(self, _):
-        if self.render_type.value in self.render_type_name.keys():
-            self.viewer_renderer.render_type2 = self.render_type_name[self.render_type2.value]
-        else:
-            self.viewer_renderer.render_type2 = self.render_type_name['RGB']
-        self._handle_option_updated(_)
-
-    def _handle_activate_sh_degree_slider_updated(self, _):
-        self.viewer_renderer.gaussian_model.active_sh_degree = self.active_sh_degree_slider.value
-        self._handle_option_updated(_)
+    def rerender_for_all_client(self):
+        for client_id in self.clients:
+            try:
+                # switch to low resolution mode first, then notify the client to render
+                self.clients[client_id].state = "low"
+                self.clients[client_id].render_trigger.set()
+            except:
+                # ignore errors
+                pass
 
     def _handle_option_updated(self, _):
         """
         Simply push new render to all client
         """
         return self.rerender_for_all_client()
-
-    def handle_option_updated(self, _):
-        return self._handle_option_updated(_)
-
-    def rerender_for_client(self, client_id: int):
-        """
-        Render for specific client
-        """
-        try:
-            # switch to low resolution mode first, then notify the client to render
-            self.clients[client_id].state = "low"
-            self.clients[client_id].render_trigger.set()
-        except:
-            # ignore errors
-            pass
-
-    def rerender_for_all_client(self):
-        for i in self.clients:
-            self.rerender_for_client(i)
 
     def _handle_new_client(self, client: viser.ClientHandle) -> None:
         """
@@ -555,6 +506,7 @@ class Viewer:
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("model_paths", type=str, nargs="+")
+    parser.add_argument("--source_path", "-s", type=str, default="")
     parser.add_argument("--host", "-a", type=str, default="0.0.0.0")
     parser.add_argument("--port", "-p", type=int, default=8080)
     parser.add_argument("--background_color", "-b",
@@ -582,7 +534,7 @@ if __name__ == "__main__":
     parser.add_argument("--crop_box_size", type=float, default=16.0)
     parser.add_argument("--float32_matmul_precision", "--fp", type=str, default=None)
     parser.add_argument("--from_direct_path", type=str, default=None)
-    args = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
 
     # set torch float32_matmul_precision
     if args.float32_matmul_precision is not None:
@@ -602,5 +554,5 @@ if __name__ == "__main__":
 
     # create viewer
     viewer_init_args = {key: getattr(args, key) for key in vars(args)}
-    viewer = Viewer(**viewer_init_args)
+    viewer = Viewer(args, **viewer_init_args)
     viewer.start()
