@@ -7,6 +7,10 @@ import numpy as np
 import viser
 import viser.transforms as vtf
 import re
+import threading
+import time
+import trimesh
+from internal.viewer import MeshExporter
 
 
 class EditPanel:
@@ -20,16 +24,20 @@ class EditPanel:
         self.viewer = viewer
         self.tab = tab
         self.C0 = 0.28209479177387814
+        self.mesh = None
+        self.mesh_path = None
 
         self._setup_point_cloud_folder()
         self._setup_gaussian_edit_folder()
         self._setup_save_gaussian_folder()
+        self._setup_mesh_export_folder()
+        self.export_mesh_block()
 
     def _setup_point_cloud_folder(self):
         server = self.server
         with self.server.add_gui_folder("Point Cloud"):
             self.show_point_cloud_checkbox = server.add_gui_checkbox(
-                "on Edit Mode",
+                "Edit (w/ ptc)",
                 initial_value=False,
             )
             self.point_size = server.add_gui_number(
@@ -290,3 +298,134 @@ class EditPanel:
         self._update_pcd(selected_gaussians_indices)
 
         self.viewer.rerender_for_all_client()
+
+    def _setup_mesh_export_folder(self):
+        with self.server.add_gui_folder("Mesh Export"):
+            self.unbounded = self.server.add_gui_checkbox(
+                "unbounded",
+                initial_value=False,
+            )
+            self.num_cluster = self.server.add_gui_slider(
+                "Num Cluster",
+                min=10,
+                max=200,
+                step=10,
+                initial_value=50,
+            )
+            self.mesh_res = self.server.add_gui_slider(
+                "Mesh Res",
+                min=128,
+                max=2048,
+                step=128,
+                initial_value=1024,
+            )
+            self.export_button = self.server.add_gui_button("Export Mesh", color="green", icon=viser.Icon.FILE_EXPORT)
+            self.show_mesh_button = self.server.add_gui_button("Show Mesh Result", color="yellow", icon=viser.Icon.PLAYER_PLAY)
+            self.unshow_mesh_button = self.server.add_gui_button("unshow Mesh", color="yellow", icon=viser.Icon.PLAYER_PLAY, visible=False)
+
+    def export_mesh_block(self):
+        self._default_export_log = f"**Model path**: {self.viewer.model_paths} \\\n  **Data path**: {self.viewer.source_path} \\\n  ![visualization]({os.getcwd() + '/assets/loading.gif'})"
+        self._mesh_export_log_dir = os.path.join(os.getcwd(), 'temp/mesh_log.txt')
+        if os.path.exists(self._mesh_export_log_dir):
+            os.remove(self._mesh_export_log_dir)
+        with open(self._mesh_export_log_dir, 'w') as file:
+            file.write("mesh exporting... \\\n ")
+        # Mesh Export !!! 
+        
+        
+        def read_last_lines(file_path, num_lines):
+            with open(file_path, 'r') as file:
+                lines = file.readlines()
+                formatted_lines = [' \\\n [Info]' + line.rstrip() for line in lines[-num_lines:-1]]
+                return ''.join(formatted_lines)
+
+        @self.export_button.on_click
+        def _(event: viser.GuiEvent) -> None:
+            with self.server.atomic():
+                with event.client.add_gui_modal("[Mesh Export]") as modal:
+                    self.export_mesh_text = event.client.add_gui_markdown(self._default_export_log)
+                    close_button = event.client.add_gui_button("Close", visible=False)
+                    @close_button.on_click
+                    def _(_) -> None:
+                        modal.close()
+
+            # Update the GUI first before starting the thread
+            def update_gui_and_start_export():
+                def export() -> None:
+                    ex_args, model_params, export_pipe_params = MeshExporter.parse_args_mesh(self.viewer.model_paths, 
+                                                                                            self.viewer.source_path, 
+                                                                                            self.viewer.args, 
+                                                                                            unbounded = self.unbounded.value, 
+                                                                                            mesh_res = self.mesh_res.value, 
+                                                                                            num_cluster = self.num_cluster.value)
+                    mesh_exporter = MeshExporter(ex_args, self.viewer.gaussian_model, self.viewer.iteration, model_params, export_pipe_params)
+                    mesh_exporter.start_logging(self._mesh_export_log_dir)
+                    self.mesh_path = mesh_exporter.export_mesh()
+                    mesh_exporter.stop_logging()
+
+                def update_log() -> None:
+                    while export_thread.is_alive():
+                        self.export_mesh_text.content = self._default_export_log + read_last_lines(self._mesh_export_log_dir, 15)
+                        time.sleep(0.1)
+                    
+                export_thread = threading.Thread(target=export)
+                log_thread = threading.Thread(target=update_log)
+                export_thread.start()
+                log_thread.start()
+                export_thread.join()
+                log_thread.join()
+                self.export_mesh_text.content = f'Done! \n Your Mesh is saved at: {self.mesh_path}'
+                close_button.visible = True
+
+            # Call the function to update the GUI and start the export process
+            update_gui_and_start_export()
+
+        @self.show_mesh_button.on_click
+        def _(event: viser.GuiEvent) -> None:
+            with self.server.atomic():
+                self.show_mesh_button.visible = False 
+                self.unshow_mesh_button.visible = True
+
+                if self.mesh is None and self.mesh_path is not None:
+                    mesh = trimesh.load_mesh(self.mesh_path)
+                    mesh.apply_transform(np.linalg.inv(self.viewer.camera_transform.cpu().numpy()))
+                    self.mesh = self.server.add_mesh_trimesh(
+                        name="/trimesh",
+                        mesh=mesh, 
+                        scale = 1,
+                        wxyz=event.client.camera.wxyz,
+                        position=tuple(self.viewer.camera_center),
+                    )
+                    self.mesh_control = event.client.add_transform_controls(
+                        f"/mesh_control",
+                        scale=0.5,
+                        wxyz=self.mesh.wxyz,
+                        position=self.mesh.position,
+                    )
+                    def _make_mesh_controls_callback(
+                            trimesh_obj,
+                            control: viser.TransformControlsHandle,
+                    ) -> None:
+                        @control.on_update
+                        def _(_) -> None:
+                            trimesh_obj.wxyz = control.wxyz
+                            trimesh_obj.position = control.position
+                            print(control.wxyz, control.position)
+                    _make_mesh_controls_callback(self.mesh, self.mesh_control)
+                else:
+                    with event.client.add_gui_modal("[Alert]") as modal:
+                        self.export_mesh_text = event.client.add_gui_markdown("<sub> There is no exported mesh </sub>")
+                        close_button = event.client.add_gui_button("Close", visible=True)
+                        @close_button.on_click
+                        def _(_) -> None:
+                            modal.close()
+
+        @self.unshow_mesh_button.on_click
+        def _(event: viser.GuiEvent) -> None:
+            with self.server.atomic():
+                self.show_mesh_button.visible = True 
+                self.unshow_mesh_button.visible = False
+                if self.mesh is not None:
+                    self.mesh.remove()
+                    self.mesh_control.remove()
+                    self.mesh = None

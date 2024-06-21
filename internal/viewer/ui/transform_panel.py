@@ -4,6 +4,7 @@ import math
 import viser
 import viser.transforms as vst
 from internal.utils.gaussian_utils import GaussianTransformUtils
+from internal.viewer.ui.up_direction_folder import UpDirectionFolder
 
 
 @dataclass
@@ -114,6 +115,8 @@ class TransformPanel:
                     r_xyz_text_handle.value = (0., 0., 0.)
                     self._show_model_transform_handle(i)
 
+        UpDirectionFolder(viewer, server)
+
     def _make_size_slider_callback(
             self,
             idx: int,
@@ -195,6 +198,8 @@ class TransformPanel:
             r_wxyz=model_pose.wxyz,
             t_xyz=model_pose.position,
         )
+        self.viewer.viewer_renderer.gaussian_model = self.viewer.gaussian_model
+        self.viewer.viewer_renderer.update_pc_features()
 
     def _make_t_xyz_text_callback(
             self,
