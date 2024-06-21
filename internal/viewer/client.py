@@ -68,7 +68,7 @@ class ClientThread(threading.Thread):
         max_res = self.viewer.max_res_when_static.value
         image_height = max_res
         image_width = int(image_height * cam.aspect)
-        
+
         if image_width > max_res:
             image_width = max_res
             image_height = int(image_width / cam.aspect)
@@ -101,12 +101,14 @@ class ClientThread(threading.Thread):
             valid_range = (self.viewer.box_x.value, self.viewer.box_y.value, self.viewer.box_z.value)
         return self.renderer.get_outputs(
             camera,
-            scaling_modifier=self.viewer.scaling_modifier.value,
             valid_range=valid_range,
             split=self.viewer.enable_split.value,
             slider=self.viewer.mode_slider.value,
             show_ptc=self.viewer.enable_ptc.value,
             point_size=self.viewer.point_size.value,
+            active_sh_degree = self.viewer.active_sh_degree_slider.value, 
+            scaling_modifier = self.viewer.scaling_modifier_slider.value, 
+            depth_ratio = self.viewer.depth_ratio_slider.value,
             render_type = self.viewer.render_type_name[self.viewer.render_type.value],
             render_type1 = self.viewer.render_type_name[self.viewer.render_type1.value], 
             render_type2 = self.viewer.render_type_name[self.viewer.render_type2.value], 
@@ -155,6 +157,7 @@ class ClientThread(threading.Thread):
         while framenum < len(camera_paths) and self.viewer.render_panel.STOP.visible:
             with self.client.atomic():
                 if self.viewer.render_panel.preview_pause.visible:
+                    start = time.time()
                     self.viewer.render_panel.preview_frame_slider.value = framenum
                     image = self.render_image_from_paths(camera_paths[framenum], camera_params)
                     framenum += 1
@@ -163,28 +166,43 @@ class ClientThread(threading.Thread):
                         format=self.viewer.image_format,
                         jpeg_quality=jpeg_quality,
                     )
+                    self.render_trigger.set()
+                    end = time.time()
+                    self.viewer.fps.value = f'{(1 / (end-start)):.1f} frame/sec'
+                    self.viewer.gpu_mem.value = self.viewer.get_gpu_memory_usage()
                 else:
                     while not self.viewer.render_panel.preview_pause.visible:
                         time.sleep(1/10)
-                self.render_trigger.set()
+
+    def set_pre_preview(self):
+        self.viewer.render_panel.show_checkbox.value = False
+        self.viewer.render_panel.show_splines.value = False
+        self.viewer.render_panel.move_checkbox.value = False
+
+    def set_post_preview(self):
+        self.viewer.render_panel.play_preview = False
+        self.viewer.render_panel.preview_pause.visible = False
+        self.viewer.render_panel.STOP.visible = False
+        self.viewer.render_panel.preview_button.visible = True
+        self.viewer.render_panel.preview_frame_slider.value = 0
+        self.viewer.render_panel.show_checkbox.value = True
+        self.viewer.render_panel.show_splines.value = True
+        self.viewer.render_panel.move_checkbox.value = True
 
     def render_and_send(self):
-        start = time.time()
         if hasattr(self.viewer, 'render_panel'):
             if self.viewer.render_panel.play_preview:
                 if self.viewer.render_panel.preview_cameras is not None:
                     fps = self.viewer.render_panel.preview_cameras['fps']
+                    self.set_pre_preview() # hide keyframes / splines / controllers
                     self.send_camera_path(self.viewer.render_panel.preview_cameras['camera_path'], fps)
-                    self.viewer.render_panel.play_preview = False
-                    self.viewer.render_panel.preview_pause.visible = False
-                    self.viewer.render_panel.STOP.visible = False
-                    self.viewer.render_panel.preview_button.visible = True
-                    self.viewer.render_panel.preview_frame_slider.value = 0
+                    self.set_post_preview() # show hide keyframes / splines / controllers & preview / pause / Stop button to default
+                    self.render_trigger.clear()
                     self.render_trigger.set()
         with self.client.atomic():
             self.last_move_time = time.time()
             with torch.no_grad():
-                if hasattr(self.viewer, 'edit_panel') and self.viewer.edit_panel.show_point_cloud_checkbox.value:
+                if hasattr(self.viewer, 'edit_panel') and (self.viewer.edit_panel.show_point_cloud_checkbox.value or self.viewer.edit_panel.mesh is not None):
                     image_width, image_height = self.make_camera(self.last_camera, ptc_mode=True)
                     image = self.viewer.background_color.unsqueeze(dim=1).unsqueeze(dim=2).expand([3, image_height, image_width])
                 else:
@@ -199,7 +217,7 @@ class ClientThread(threading.Thread):
                     jpeg_quality=int(self.viewer.jpeg_quality_when_static.value),
                 )
         end = time.time()
-        self.viewer.fps.value = f'{(1 / (end-start)):.1f} frame/sec'
+        self.viewer.fps.value = f'{(1 / (end-self.last_move_time)):.1f} frame/sec'
         self.viewer.gpu_mem.value = self.viewer.get_gpu_memory_usage()
 
     def run(self):
