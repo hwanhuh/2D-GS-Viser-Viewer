@@ -22,7 +22,6 @@ class UpDirectionFolder:
             ).T.numpy()
             return vtf.SO3.from_matrix(rotation_matrix_of_up_direction)
 
-
         with server.add_gui_folder("Up Direction"):
             # reset up
             reset_up_button = server.add_gui_button(
@@ -49,7 +48,6 @@ class UpDirectionFolder:
                 up_direction_visualize_transform.wxyz = up_rotation.wxyz
                 # update rotation text inputs
                 up_rotations_input.value = up_rotation.as_rpy_radians()
-
 
             # up text vector
             up_direction_vector_input = server.add_gui_vector3(

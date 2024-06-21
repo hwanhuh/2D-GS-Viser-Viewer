@@ -15,7 +15,14 @@ A significant portion of this project is built upon several existing works to pr
 | --- | --- | --- |
 | <img src="assets/viser_general_opt.gif" width="300"/> | <img src="assets/viser_edit_opt.gif" width="300"/> | <img src="assets/viser_transform_opt.gif" width="300"/> |
 
+- Various Render Type: RGB / Edge / Normal / View-Normal / Depth / Depth-to-Normal / Depth-Distortion / Curvature
+- Edit & Save Splats
+- Mesh Export
+- Render Path and Preview  
+
 ## Updates History
+- 2024/06/21
+    - Mesh Export 
 - 2024/06/17
     - Improve fps
     - Minor code revision
@@ -66,9 +73,9 @@ pip install lightning
 ## Usage
 - View a 2D GS ply file 
 ```bash
-python viewer.py <path to pre-trained model> <or direct path to the ply file>
+python viewer.py <path to pre-trained model> <or direct path to the ply file> -s <data source path>
 ### enable transform mode
-python viewer.py <path to pre-trained model> <or direct path to the ply file> --enable_transform
+python viewer.py <path to pre-trained model> -s <data source path> --enable_transform
 ```
 - Train w/ viewer
 ```bash

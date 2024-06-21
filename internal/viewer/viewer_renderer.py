@@ -7,6 +7,8 @@ from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
 from utils.point_utils import depth_to_normal
 
+clm_colors = torch.tensor(plt.cm.get_cmap("turbo").colors)
+
 def gradient_map(image):
     sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]).float().unsqueeze(0).unsqueeze(0).cuda()/4
     sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]).float().unsqueeze(0).unsqueeze(0).cuda()/4
@@ -18,21 +20,19 @@ def gradient_map(image):
     magnitude = torch.sqrt(grad_x ** 2 + grad_y ** 2).norm(dim=0, keepdim=True)
     return magnitude
 
-def color_map(map, cmap="turbo"):
-    colors = torch.tensor(plt.cm.get_cmap(cmap).colors).to(map.device)
+def color_map(map):
+    colors = clm_colors.to(map.device)
     map = (map - map.min()) / (map.max() - map.min())
     map = (map * 255).round().long().squeeze()
-    map = colors[map].permute(2 ,0, 1)
+    map = colors[map].permute(2, 0, 1)
     return map
 
 class ViewerRenderer:
     def __init__(self,
                 gaussian_model,
-                pipe,
                 background_color):
         super().__init__()
         self.gaussian_model = gaussian_model
-        self.pipe = pipe
         self.background_color = background_color
         self.update_pc_features()
 
@@ -52,8 +52,10 @@ class ViewerRenderer:
 
     def render_viewer(self,
                     viewpoint_camera, 
+                    active_sh_degree, 
+                    scaling_modifier, 
+                    depth_ratio,
                     bg_color : torch.Tensor, 
-                    scaling_modifier: float = 1.0, 
                     show_ptc: bool = False,
                     point_size: float = 0.001,
                     valid_range = None):
@@ -71,17 +73,17 @@ class ViewerRenderer:
             tanfovx=tanfovx,
             tanfovy=tanfovy,
             bg=bg_color,
-            scale_modifier=scaling_modifier,
+            scale_modifier=scaling_modifier, #self.gaussian_model.scaling_modifier,
             viewmatrix=viewpoint_camera.world_to_camera,
             projmatrix=viewpoint_camera.full_projection,
-            sh_degree=self.gaussian_model.active_sh_degree,
+            sh_degree=active_sh_degree, #self.gaussian_model.active_sh_degree,
             campos=viewpoint_camera.camera_center,
             prefiltered=False,
             debug=False,
         )
         rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
-        scales = torch.full(self.scales.shape, point_size).to(self.scales.device) if show_ptc else self.scales
+        scales = torch.full(self.scales.shape, point_size*0.1).to(self.scales.device) if show_ptc else self.scales
         if valid_range is not None:
             is_x_in_range = (valid_range[0][0] <= self.means3D[:, 0]) & (self.means3D[:, 0] <= valid_range[0][1])
             is_y_in_range = (valid_range[1][0] <= self.means3D[:, 1]) & (self.means3D[:, 1] <= valid_range[1][1])
@@ -116,7 +118,7 @@ class ViewerRenderer:
         
         # get depth distortion map & depth map & depth-to-normal map 
         render_dist = allmap[6:7]
-        surf_depth = render_depth_expected * (1-self.pipe.depth_ratio) + (self.pipe.depth_ratio) * render_depth_median
+        surf_depth = render_depth_expected * (1 - depth_ratio) + (depth_ratio) * render_depth_median
         surf_normal = depth_to_normal(viewpoint_camera, surf_depth)
         surf_normal = surf_normal.permute(2, 0, 1)
         surf_normal = surf_normal * (render_alpha).detach()
@@ -138,12 +140,14 @@ class ViewerRenderer:
 
     def get_outputs(self, 
                     camera, 
-                    scaling_modifier: float=1., 
                     valid_range: tuple=None, 
                     split: bool=False, 
                     slider: float=0.5,
                     show_ptc: bool=False,
-                    point_size: float=0.1,
+                    point_size: float=0.01,
+                    active_sh_degree: int=3, 
+                    scaling_modifier: float=1., 
+                    depth_ratio: float=0.,
                     render_type: str="render",
                     render_type1: str="render", 
                     render_type2: str="render", 
@@ -156,11 +160,14 @@ class ViewerRenderer:
             elif type == 'edge':
                 return color_map(gradient_map(results['render']))
             else:
+                # handle exception as RGB render
                 return results['render']
 
         results = self.render_viewer(camera, 
-                                    self.background_color,
+                                    active_sh_degree, 
                                     scaling_modifier, 
+                                    depth_ratio,
+                                    self.background_color,
                                     valid_range = valid_range,
                                     show_ptc = show_ptc, 
                                     point_size = point_size, 

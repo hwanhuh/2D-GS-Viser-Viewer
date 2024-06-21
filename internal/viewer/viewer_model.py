@@ -8,6 +8,8 @@ class GaussianModelforViewer(GaussianModel):
     def __init__(self, sh_degree : int):
         super().__init__(sh_degree)
         self._opacity_origin = None
+        self.scaling_modifier = 1.
+        self.depth_ratio = 0.
 
     def select(self, mask: torch.tensor):
         if self._opacity_origin is None:
