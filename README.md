@@ -16,13 +16,18 @@ A significant portion of this project is built upon several existing works to pr
 | <img src="assets/viser_general_opt.gif" width="300"/> | <img src="assets/viser_edit_opt.gif" width="300"/> | <img src="assets/viser_transform_opt.gif" width="300"/> |
 
 - Various Render Type: RGB / Edge / Normal / View-Normal / Depth / Depth-to-Normal / Depth-Distortion / Curvature
+- Disk Visualization
 - Edit & Save Splats
-- Mesh Export
+- Mesh Export (in Edit Tab)
 - Render Path and Preview  
 
 ## Updates History
+- 2024/06/28
+    - Disk Visualization
+    - Fix camera parameters to the same as the original work
+    - Fix CUDA device side assertion error when color mapping (divide by zero)
 - 2024/06/21
-    - Mesh Export 
+    - Mesh Export in Edit Tab: you can export the mesh of the scene (also for the edited scene) and show the result to the viewer
 - 2024/06/17
     - Improve fps
     - Minor code revision
