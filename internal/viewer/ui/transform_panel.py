@@ -114,6 +114,9 @@ class TransformPanel:
                     t_xyz_text_handle.value = (0., 0., 0.)
                     r_xyz_text_handle.value = (0., 0., 0.)
                     self._show_model_transform_handle(i)
+        UpDirectionFolder(viewer, server)
+
+        UpDirectionFolder(viewer, server)
 
         UpDirectionFolder(viewer, server)
 
