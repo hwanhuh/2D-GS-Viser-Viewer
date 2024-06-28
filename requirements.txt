@@ -12,5 +12,5 @@ viser==0.1.29
 splines 
 lightning 
 plyfile
-submodules/diff-surfel-rasterization
-submodules/simple-knn
+2d_gaussian_splatting/submodules/diff-surfel-rasterization
+2d_gaussian_splatting/submodules/simple-knn
