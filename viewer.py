@@ -1,4 +1,5 @@
 import os
+import sys 
 import math
 import glob
 import time
@@ -11,6 +12,8 @@ import viser.transforms as vtf
 import threading
 import warnings 
 warnings.filterwarnings('ignore')
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(current_dir, '2d_gaussian_splatting'))
 
 from pathlib import Path
 from argparse import ArgumentParser
