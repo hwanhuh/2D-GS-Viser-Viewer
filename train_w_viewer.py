@@ -14,7 +14,7 @@ import torch
 import queue
 import threading
 from random import randint
-from utils.loss_utils import l1_loss, ssim
+from utils.loss_utils import l1_loss, ssim, ms_ssim, edge_aware_normal_loss
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -37,8 +37,10 @@ class Trainer:
         self.update_queue = queue.Queue()
         self.lock = threading.Lock()
     
-    def set_viewer(self, exp_path):
-        self.viser_viewer = Viewer(model_paths = exp_path, 
+    def set_viewer(self, args, exp_path, src_path):
+        self.viser_viewer = Viewer(args = args,
+                                    model_paths = exp_path, 
+                                    source_path = src_path,
                                     no_edit_panel = True,
                                     no_render_panel = True,
                                     is_training = True,
@@ -47,7 +49,7 @@ class Trainer:
     def viewer_thread(self):
         self.viser_viewer.start()
 
-    def training(self, dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint):
+    def training(self, args, dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint):
         first_iter = 0
         tb_writer, exp_path = self.prepare_output_and_logger(dataset)
         gaussians = GaussianModel(dataset.sh_degree)
@@ -68,7 +70,7 @@ class Trainer:
         ema_dist_for_log = 0.0
         ema_normal_for_log = 0.0
 
-        self.set_viewer([exp_path])
+        self.set_viewer(args, [exp_path], args.source_path)
         self.viser_viewer._get_training_gaussians(gaussians)
 
         viewer_thread = threading.Thread(target=self.viewer_thread)
@@ -101,7 +103,11 @@ class Trainer:
             gt_mask = viewpoint_cam.gt_mask.cuda()
 
             Ll1 = l1_loss(image, gt_image)
-            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+            # original loss 
+            # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+
+            # replaced loss: using ms_ssim instead of ssim / add edge-aware normal loss
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ms_ssim(image, gt_image))
             
             # regularization
             lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
@@ -110,8 +116,15 @@ class Trainer:
             rend_dist = render_pkg["rend_dist"]
             rend_normal  = render_pkg['rend_normal']
             surf_normal = render_pkg['surf_normal']
+
+            # 2D GS's original normal-depth consistency loss 
             normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None]
             normal_loss = lambda_normal * (normal_error).mean()
+
+            # AtomGS's curvature-edge normal loss
+            # normal_error = edge_aware_normal_loss(gt_image, surf_normal)
+            # normal_loss = lambda_normal * normal_error
+
             dist_loss = lambda_dist * (rend_dist).mean()
 
             # loss
@@ -282,7 +295,8 @@ if __name__ == "__main__":
 
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     trainer = Trainer()
-    trainer.training(lp.extract(args), 
+    trainer.training(args,
+                lp.extract(args), 
                 op.extract(args), 
                 pp.extract(args), 
                 args.test_iterations, 

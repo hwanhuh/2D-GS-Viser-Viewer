@@ -18,10 +18,8 @@ from typing import Tuple, Literal, List
 from viser.theme import TitlebarButton, TitlebarConfig, TitlebarImage
 
 from arguments import ModelParams, PipelineParams, get_combined_args
+from internal.viewer import ViewerRenderer, ClientThread
 from internal.viewer import GaussianModelforViewer as GaussianModel
-from internal.viewer import ViewerRenderer
-from internal.viewer import ClientThread
-from internal.viewer import MeshExporter
 from internal.viewer.ui import RenderPanel, TransformPanel, EditPanel
 
 DROPDOWN_USE_DIRECT_APPEARANCE_EMBEDDING_VALUE = "@Direct"
@@ -31,7 +29,7 @@ class Viewer:
             self,
             args, 
             model_paths: str,
-            source_path: str,
+            source_path: str = '',
             host: str = "0.0.0.0",
             port: int = 8080,
             background_color: Tuple = (0.5, 0.5, 0.5),
@@ -51,8 +49,6 @@ class Viewer:
             from_direct_path: str = None, 
             is_training: bool = False,
     ):
-        self.args = args
-        self.device = torch.device("cuda")
         self.render_type_name = {
             "RGB": 'render', 
             "Edge": 'edge',
@@ -65,8 +61,11 @@ class Viewer:
             "Depth-to-Curvature": 'curvature',
             "None": 'render',
         }
+        self.args = args 
+        self.model_paths = model_paths[0]
         self.source_path = source_path
-        self.exporting = False 
+        self.cameras_json = os.path.join(self.model_paths, "cameras.json") if cameras_json is None else cameras_json
+
         self.host = host
         self.port = port
         self.background_color = torch.tensor(background_color, dtype=torch.float32, device="cuda")
@@ -75,6 +74,8 @@ class Viewer:
         self.enable_transform = enable_transform
         self.show_cameras = show_cameras
         self.crop_box_size = crop_box_size
+
+        self.device = torch.device("cuda")
         self.total_device_memory = torch.cuda.get_device_properties(self.device).total_memory / 1024 ** 2
 
         self.up_direction = np.asarray([0., 0., 1.])
@@ -84,17 +85,16 @@ class Viewer:
         self.is_training = is_training
         self.show_edit_panel = ~no_edit_panel
         self.show_render_panel = ~no_render_panel
-        self._init_models(model_paths, iterations)
-        self.cameras_json = os.path.join(self.model_paths, "cameras.json") if cameras_json is None else cameras_json
-        self.camera_transform = self._get_scene_camera_transform(self.cameras_json, reorient, up)
-        self.camera_poses = self._init_camera_poses(self.cameras_json)
+
+        # init model & scene 
+        self._init_models(iterations)
+        self._init_scene_camera_transform(self.cameras_json, reorient, up)
+        self._init_camera_poses(self.cameras_json)
         self.clients = {}
         
-
-    def _init_models(self, model_paths, iterations):
+    def _init_models(self, iterations):
         # init gaussian model & renderer
         self.gaussian_model = GaussianModel(sh_degree=self.sh_degree)
-        self.model_paths = model_paths[0]
         if not self.is_training:
             self.iteration = iterations
             if not self.model_paths.lower().endswith('.ply'):
@@ -106,20 +106,17 @@ class Viewer:
                 raise FileNotFoundError
             print('[INFO] ply path loaded from:', self.ply_path)
             self.gaussian_model.load_ply(self.ply_path)
-        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.background_color)
+        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.background_color, not self.is_training)
 
-    def _get_scene_camera_transform(self, cameras_json_path, mode, up):
+    def _init_scene_camera_transform(self, cameras_json_path, mode, up):
         transform = torch.eye(4, dtype=torch.float)
+        self.camera_transform = transform
 
         if mode == "disable":
-            return transform
-
+            return
         if not os.path.exists(cameras_json_path):
-            if mode == "enable":
-                raise RuntimeError(f"{cameras_json_path} does not exist")
-            return transform
-
-        print(f"load {cameras_json_path}")
+            return
+        print(f"[Info] load {cameras_json_path}")
         with open(cameras_json_path, "r") as f:
             cameras = json.load(f)
         up_vector = torch.zeros(3)
@@ -135,7 +132,7 @@ class Viewer:
             up_vector = -up_vector / torch.linalg.norm(up_vector)
             self.up_direction = up_vector.numpy()
 
-        return transform
+        self.camera_transform = transform
 
     def _init_camera_poses(self, cameras_json_path):
         if not os.path.exists(cameras_json_path):
@@ -144,7 +141,7 @@ class Viewer:
             camera_poses = json.load(f)
         if camera_poses:
             self.camera_center = np.mean(np.asarray([i["position"] for i in camera_poses]), axis=0)
-        return camera_poses
+        self.camera_poses = camera_poses
 
     def _get_training_gaussians(self, new_gaussians):
         # slow and large gpu consumption
@@ -154,13 +151,11 @@ class Viewer:
         self.gaussian_model._rotation = new_gaussians._rotation.clone().detach()
         self.gaussian_model._features_dc = new_gaussians._features_dc.clone().detach()
         self.gaussian_model._features_rest = new_gaussians._features_rest.clone().detach()
-        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.background_color)
+        self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.background_color, self.is_training)
 
-    def load_camera_poses(self, cameras_json_path: str):
-        if os.path.exists(cameras_json_path) is False:
-            return []
-        with open(cameras_json_path, "r") as f:
-            return json.load(f)
+    def get_gpu_memory_usage(self):
+        total_memory = torch.cuda.memory_allocated() + torch.cuda.memory_reserved() 
+        return f"{total_memory / 1024 ** 2:.1f} / {self.total_device_memory:.1f} MB"
 
     def add_cameras_to_scene(self, viser_server):
         if len(self.camera_poses) == 0:
@@ -209,10 +204,6 @@ class Viewer:
                 self.camera_visible = not self.camera_visible
                 for i in self.camera_handles:
                     i.visible = self.camera_visible
-
-    def get_gpu_memory_usage(self):
-        total_memory = torch.cuda.memory_allocated() + torch.cuda.memory_reserved() 
-        return f"{total_memory / 1024 ** 2:.1f} / {self.total_device_memory:.1f} MB"
 
     def start(self, block: bool = True, server_config_fun=None, tab_config_fun=None):
         # create viser server
@@ -382,6 +373,7 @@ class Viewer:
                     "as Pointcloud",
                     initial_value=False,
                 )
+                self.surfel_mode = server.add_gui_button_group("View Type", ("ptc", "disk"))
                 self.point_size = server.add_gui_slider(
                     "Point Size",
                     min=0.001,
@@ -389,12 +381,19 @@ class Viewer:
                     initial_value=0.01,
                     step=0.001,
                 )
-                self.scaling_modifier_slider = server.add_gui_slider(
+                self.scale_slider = server.add_gui_slider(
                     "Scaler",
-                    min=0.,
-                    max=1.,
+                    min=0.1,
+                    max=2.,
                     step=0.1,
                     initial_value=1.,
+                )
+                self.sparsity_slider = server.add_gui_slider(
+                    "Sparsity",
+                    min=1,
+                    max=10,
+                    step=1,
+                    initial_value=1,
                 )
                 
                 if self.viewer_renderer.gaussian_model.max_sh_degree > 0:
@@ -446,8 +445,10 @@ class Viewer:
             @self.enable_split.on_update
             @self.mode_slider.on_update
             @self.depth_ratio_slider.on_update
-            @self.scaling_modifier_slider.on_update
+            @self.scale_slider.on_update
+            @self.sparsity_slider.on_update
             @self.enable_ptc.on_update
+            @self.surfel_mode.on_click
             @self.point_size.on_update
             @self.enable_crop.on_update
             @self.box_x.on_update 
@@ -462,8 +463,6 @@ class Viewer:
                 assert event.client is not None
                 event.client.camera.position = self.camera_center + np.asarray([2.5, 0., 0.])
                 event.client.camera.look_at = self.camera_center
-
-                import pdb; pdb.set_trace()
 
     def rerender_for_all_client(self):
         for client_id in self.clients:
