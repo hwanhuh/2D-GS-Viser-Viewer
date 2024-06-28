@@ -1,3 +1,5 @@
+torch
+torchvision
 pillow==10.2.0
 pip==23.3.1
 typing_extensions==4.9.0
