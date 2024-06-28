@@ -64,14 +64,15 @@ A significant portion of this project is built upon several existing works to pr
 
 ## Installation
 
-- Follow the original installation instructions from 2D GS, then add all files from this project to the original project directory. 
-(*i.e.,* 'viewer.py' is in '~/2d-gaussian-splatting/viewer.py')
-- Tested on Ubuntu 20.04.
+- If you already have the conda environment of 2D GS, then use it
+- If not, follow the installation instruction from the original 2D GS
 
 ```bash
 git clone https://github.com/hwanhuh/2D-GS-Viser-Viewer.git --recursive
 cd 2D-GS-Viser-Viewer
-pip install -r requirements.txt
+pip install viser==0.1.29
+pip install splines  
+pip install lightning
 ```
 
 ## Usage
