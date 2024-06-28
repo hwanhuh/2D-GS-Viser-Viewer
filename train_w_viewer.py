@@ -103,12 +103,8 @@ class Trainer:
             gt_mask = viewpoint_cam.gt_mask.cuda()
 
             Ll1 = l1_loss(image, gt_image)
-            # original loss 
-            # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
-            # replaced loss: using ms_ssim instead of ssim / add edge-aware normal loss
-            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ms_ssim(image, gt_image))
-            
             # regularization
             lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
             lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
@@ -120,11 +116,6 @@ class Trainer:
             # 2D GS's original normal-depth consistency loss 
             normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None]
             normal_loss = lambda_normal * (normal_error).mean()
-
-            # AtomGS's curvature-edge normal loss
-            # normal_error = edge_aware_normal_loss(gt_image, surf_normal)
-            # normal_loss = lambda_normal * normal_error
-
             dist_loss = lambda_dist * (rend_dist).mean()
 
             # loss
