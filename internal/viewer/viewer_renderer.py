@@ -7,8 +7,6 @@ from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
 from utils.point_utils import depth_to_normal
 
-clm_colors = torch.tensor(plt.cm.get_cmap("turbo").colors)
-
 def gradient_map(image):
     sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]).float().unsqueeze(0).unsqueeze(0).cuda()/4
     sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]).float().unsqueeze(0).unsqueeze(0).cuda()/4
@@ -20,21 +18,17 @@ def gradient_map(image):
     magnitude = torch.sqrt(grad_x ** 2 + grad_y ** 2).norm(dim=0, keepdim=True)
     return magnitude
 
-def color_map(map):
-    colors = clm_colors.to(map.device)
-    map = (map - map.min()) / (map.max() - map.min())
-    map = (map * 255).round().long().squeeze()
-    map = colors[map].permute(2, 0, 1)
-    return map
-
 class ViewerRenderer:
     def __init__(self,
                 gaussian_model,
-                background_color):
+                background_color, 
+                do_initialize=True):
         super().__init__()
         self.gaussian_model = gaussian_model
         self.background_color = background_color
-        self.update_pc_features()
+        self.clm_colors = torch.tensor(plt.cm.get_cmap("turbo").colors, device="cuda")
+        if do_initialize:
+            self.update_pc_features()
 
     def update_pc_features(self):
         self.means3D = self.gaussian_model.get_xyz
@@ -50,13 +44,29 @@ class ViewerRenderer:
         self.rotations = self.gaussian_model.get_rotation
         self.shs = self.gaussian_model.get_features
 
+    def disk_kernel(self, opacity):
+        return torch.exp(-1/2 * 100 * torch.clamp(opacity-0.5, min=0) ** 2)
+
+    def color_map(self, map):
+        if not map.min() == map.max():
+            map = (map - map.min()) / (map.max() - map.min())
+            map = (map * 255).round().long().squeeze()
+            map = self.clm_colors[map].permute(2, 0, 1)
+            return map
+        else:
+            map = torch.zeros_like(map, device=map.device).round().long().squeeze()
+            map = self.clm_colors[map].permute(2, 0, 1)
+            return map
+
     def render_viewer(self,
                     viewpoint_camera, 
                     active_sh_degree, 
                     scaling_modifier, 
                     depth_ratio,
                     bg_color : torch.Tensor, 
+                    sparsity: int = 1,
                     show_ptc: bool = False,
+                    show_disk: bool = False,
                     point_size: float = 0.001,
                     valid_range = None):
         """
@@ -73,9 +83,9 @@ class ViewerRenderer:
             tanfovx=tanfovx,
             tanfovy=tanfovy,
             bg=bg_color,
-            scale_modifier=scaling_modifier, #self.gaussian_model.scaling_modifier,
-            viewmatrix=viewpoint_camera.world_to_camera,
-            projmatrix=viewpoint_camera.full_projection,
+            scale_modifier=1., #self.gaussian_model.scaling_modifier,
+            viewmatrix=viewpoint_camera.world_view_transform,
+            projmatrix=viewpoint_camera.full_proj_transform,
             sh_degree=active_sh_degree, #self.gaussian_model.active_sh_degree,
             campos=viewpoint_camera.camera_center,
             prefiltered=False,
@@ -83,7 +93,6 @@ class ViewerRenderer:
         )
         rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
-        scales = torch.full(self.scales.shape, point_size*0.1).to(self.scales.device) if show_ptc else self.scales
         if valid_range is not None:
             is_x_in_range = (valid_range[0][0] <= self.means3D[:, 0]) & (self.means3D[:, 0] <= valid_range[0][1])
             is_y_in_range = (valid_range[1][0] <= self.means3D[:, 1]) & (self.means3D[:, 1] <= valid_range[1][1])
@@ -93,13 +102,13 @@ class ViewerRenderer:
             is_in_box = self.all_ids
 
         rendered_image, radii, allmap = rasterizer(
-            means3D = self.means3D[is_in_box],
-            means2D = self.means2D[is_in_box],
-            shs = self.shs[is_in_box],
+            means3D = self.means3D[is_in_box][::sparsity],
+            means2D = self.means2D[is_in_box][::sparsity],
+            shs = self.shs[is_in_box][::sparsity],
             colors_precomp = None,
-            opacities = self.opacity[is_in_box],
-            scales = scales[is_in_box],
-            rotations = self.rotations[is_in_box],
+            opacities = self.disk_kernel(self.opacity[is_in_box][::sparsity]) if show_disk else self.opacity[is_in_box][::sparsity],
+            scales = scaling_modifier * (torch.full(self.scales.shape, point_size*0.1).to(self.scales.device)[is_in_box][::sparsity] if show_ptc else self.scales[is_in_box][::sparsity]),
+            rotations = self.rotations[is_in_box][::sparsity],
             cov3D_precomp = None
         )
         
@@ -129,12 +138,12 @@ class ViewerRenderer:
         view_normal = -torch.nn.functional.normalize(allmap[2:5], dim=0) * 0.5 + 0.5
 
         rets ={'render': rendered_image,
-                'rend_alpha': color_map(render_alpha.unsqueeze(dim=-1)), # render_alpha.repeat(3, 1, 1),
+                'rend_alpha': self.color_map(render_alpha.unsqueeze(dim=-1)), # render_alpha.repeat(3, 1, 1),
                 'rend_normal': render_normal,
                 'view_normal': view_normal,
-                'surf_depth': color_map(surf_depth.unsqueeze(dim=-1)),
+                'surf_depth': self.color_map(surf_depth.unsqueeze(dim=-1)),
                 'surf_normal': surf_normal,
-                'rend_dist': color_map(render_dist.unsqueeze(dim=-1))
+                'rend_dist': self.color_map(render_dist.unsqueeze(dim=-1))
         }
         return rets
 
@@ -144,9 +153,11 @@ class ViewerRenderer:
                     split: bool=False, 
                     slider: float=0.5,
                     show_ptc: bool=False,
+                    show_disk: bool=False,
                     point_size: float=0.01,
                     active_sh_degree: int=3, 
                     scaling_modifier: float=1., 
+                    sparsity: int=1,
                     depth_ratio: float=0.,
                     render_type: str="render",
                     render_type1: str="render", 
@@ -156,9 +167,9 @@ class ViewerRenderer:
             if type in results.keys():
                 return results[type]
             elif type == 'curvature':
-                return color_map(gradient_map(results['surf_normal']))
+                return self.color_map(gradient_map(results['surf_normal']))
             elif type == 'edge':
-                return color_map(gradient_map(results['render']))
+                return self.color_map(gradient_map(results['render']))
             else:
                 # handle exception as RGB render
                 return results['render']
@@ -168,8 +179,10 @@ class ViewerRenderer:
                                     scaling_modifier, 
                                     depth_ratio,
                                     self.background_color,
+                                    sparsity = sparsity,
                                     valid_range = valid_range,
                                     show_ptc = show_ptc, 
+                                    show_disk = show_disk,
                                     point_size = point_size, 
                                     )
         if not split: 

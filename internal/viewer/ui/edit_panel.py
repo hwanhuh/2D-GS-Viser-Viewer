@@ -332,7 +332,6 @@ class EditPanel:
             file.write("mesh exporting... \\\n ")
         # Mesh Export !!! 
         
-        
         def read_last_lines(file_path, num_lines):
             with open(file_path, 'r') as file:
                 lines = file.readlines()
