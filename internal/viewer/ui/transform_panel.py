@@ -116,10 +116,6 @@ class TransformPanel:
                     self._show_model_transform_handle(i)
         UpDirectionFolder(viewer, server)
 
-        UpDirectionFolder(viewer, server)
-
-        UpDirectionFolder(viewer, server)
-
     def _make_size_slider_callback(
             self,
             idx: int,
