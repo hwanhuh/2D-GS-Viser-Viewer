@@ -324,14 +324,14 @@ class EditPanel:
             self.unshow_mesh_button = self.server.add_gui_button("unshow Mesh", color="yellow", icon=viser.Icon.PLAYER_PLAY, visible=False)
 
     def export_mesh_block(self):
-        self._default_export_log = f"**Model path**: {self.viewer.model_paths} \\\n  **Data path**: {self.viewer.source_path} \\\n  ![visualization]({os.getcwd() + '/assets/loading.gif'})"
+        self._default_export_log = f"**Model path**: {self.viewer.model_paths} \\\n  **Data path**: {self.viewer.source_path}})"
         self._mesh_export_log_dir = os.path.join(os.getcwd(), 'temp/mesh_log.txt')
         if os.path.exists(self._mesh_export_log_dir):
             os.remove(self._mesh_export_log_dir)
-        with open(self._mesh_export_log_dir, 'w') as file:
-            file.write("mesh exporting... \\\n ")
+        dir_path = os.path.dirname(self._mesh_export_log_dir)
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
         # Mesh Export !!! 
-        
         def read_last_lines(file_path, num_lines):
             with open(file_path, 'r') as file:
                 lines = file.readlines()
@@ -351,6 +351,8 @@ class EditPanel:
             # Update the GUI first before starting the thread
             def update_gui_and_start_export():
                 def export() -> None:
+                    with open(self._mesh_export_log_dir, 'w') as file:
+                        file.write("mesh exporting... \\\n ")
                     ex_args, model_params, export_pipe_params = MeshExporter.parse_args_mesh(self.viewer.model_paths, 
                                                                                             self.viewer.source_path, 
                                                                                             self.viewer.args, 

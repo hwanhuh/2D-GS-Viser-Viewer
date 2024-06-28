@@ -1,6 +1,7 @@
 *.pyc
 .vscode
 output
+temp
 build
 edited
 assets
@@ -9,6 +10,5 @@ assets
 **__pycache__**
 *.png
 *.out
-*.gif
 *.npz
 **/tmp
