@@ -69,11 +69,10 @@ A significant portion of this project is built upon several existing works to pr
 - Tested on Ubuntu 20.04.
 
 ```bash
-pip install viser==0.1.29
-pip install splines  
-pip install lightning
+git clone https://github.com/hwanhuh/2D-GS-Viser-Viewer.git --recursive
+cd 2D-GS-Viser-Viewer
+pip install -r requirements.txt
 ```
-- **Note** sorry for the confusion, the previous instruction for the '_message_api.py' can be resolved with viser==0.1.29 
 
 ## Usage
 - View a 2D GS ply file 
@@ -88,7 +87,7 @@ python train_w_viewer.py -s <path to datas>
 ```
 - Colab
     - You can also use the viewer in the Colab, powered by ngrok (see [example](./2dgs_viewer_colab.ipynb))
-    - To use Colab and ngrok, you should add the below code to the 'start' function in the 'viewer.py' (line 246)
+    - To use Colab and ngrok, you should add the below code to the 'start' function in the 'viewer.py' 
 ```python
     def start(self, block: bool = True, server_config_fun=None, tab_config_fun=None):
         # create viser server
@@ -110,7 +109,6 @@ python train_w_viewer.py -s <path to datas>
 - **'q/e'** for up & down
 - **'w/a/s/d'** for moving
 - Mouse wheel for zoom in/out
-
 
 ## Acknowledgements
 This project is built upon the following works
