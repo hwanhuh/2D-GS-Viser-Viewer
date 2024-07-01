@@ -324,7 +324,7 @@ class EditPanel:
             self.unshow_mesh_button = self.server.add_gui_button("unshow Mesh", color="yellow", icon=viser.Icon.PLAYER_PLAY, visible=False)
 
     def export_mesh_block(self):
-        self._default_export_log = f"**Model path**: {self.viewer.model_paths} \\\n  **Data path**: {self.viewer.source_path}})"
+        self._default_export_log = f"**Model path**: {self.viewer.model_paths} \\\n  **Data path**: {self.viewer.source_path})"
         self._mesh_export_log_dir = os.path.join(os.getcwd(), 'temp/mesh_log.txt')
         if os.path.exists(self._mesh_export_log_dir):
             os.remove(self._mesh_export_log_dir)
