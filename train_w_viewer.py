@@ -10,11 +10,15 @@
 #
 
 import os
+import sys 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(current_dir, '2d_gaussian_splatting'))
+
 import torch
 import queue
 import threading
 from random import randint
-from utils.loss_utils import l1_loss, ssim, ms_ssim, edge_aware_normal_loss
+from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
