@@ -100,33 +100,28 @@ class Viewer:
         self.gaussian_model = GaussianModel(sh_degree=self.sh_degree)
         if not self.is_training:
             self.iteration = iterations
-            if not self.model_paths.lower().endswith('.ply'):
-                self.ply_path = os.path.join(self.model_paths, "point_cloud", f"iteration_{iterations}", "point_cloud.ply")
-            else:
-                self.ply_path = self.model_paths
+            self.ply_path = os.path.join(self.model_paths, "point_cloud", f"iteration_{iterations}", "point_cloud.ply") if not self.model_paths.lower().endswith('.ply') else self.model_paths
             if not os.path.exists(self.ply_path):
-                print(self.ply_path)
+                print(f'[Alert] there is no pointcloud in: {self.ply_path}')
                 raise FileNotFoundError
-            print('[INFO] ply path loaded from:', self.ply_path)
+            print(f'[INFO] ply path loaded from: {self.ply_path}')
             self.gaussian_model.load_ply(self.ply_path)
+            print(f'[INFO] number of points: {self.gaussian_model._xyz.shape[0]}')
         self.viewer_renderer = ViewerRenderer(self.gaussian_model, self.background_color, not self.is_training)
 
     def _init_scene_camera_transform(self, cameras_json_path, mode, up):
         transform = torch.eye(4, dtype=torch.float)
         self.camera_transform = transform
-
-        if mode == "disable":
-            return
-        if not os.path.exists(cameras_json_path):
-            return
-        print(f"[Info] load {cameras_json_path}")
+        if mode == "disable" or not os.path.exists(cameras_json_path): return
+        
+        print(f"[Info] Load cameras from: {cameras_json_path}")
         with open(cameras_json_path, "r") as f:
             cameras = json.load(f)
         up_vector = torch.zeros(3)
         for cam in cameras:
             up_vector += torch.tensor(cam["rotation"])[:3, 1]
         up_vector = -up_vector / torch.linalg.norm(up_vector)
-        print(f"up vector = {up_vector}")
+        print(f"[INFO] up vector = {up_vector}")
         self.up_direction = up_vector.numpy()
 
         if up is not None:
