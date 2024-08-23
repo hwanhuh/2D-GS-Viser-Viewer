@@ -6,6 +6,9 @@ This repo contains the *unofficial* viewer for the "2D Gaussian Splatting for Ge
 A significant portion of this project is built upon several existing works to provide enhanced visualization and editing capabilities for 2D Gaussian Splatting data.
 ![visualization](assets/viser_teaser.gif)
 
+
+- Related Blog Post: [Review of 2D Gaussian Splatting](https://hwan-h-heo.github.io/hwan-h-heo.io/blogs/posts/240602_2dgs/post.html)
+
 ## ⭐ Features  
 |  Rendering  | Training |
 | --- | --- |
@@ -117,4 +120,4 @@ This project is built upon the following works
 - [Viser](https://github.com/nerfstudio-project/viser)
 - [Gaussian Splatting Pytorch Lightning](https://github.com/yzslab/gaussian-splatting-lightning).
 
-Realted Blog Post: [Review of 2D Gaussian Splatting (Korean)](https://velog.io/@gjghks950/Review-2D-Gaussian-Splatting-for-Geometrically-Accurate-Radiance-Fields-Viewer-%EA%B5%AC%ED%98%84-%EC%86%8C%EA%B0%9C)
+Related Blog Post: [Review of 2D Gaussian Splatting](https://hwan-h-heo.github.io/hwan-h-heo.io/blogs/posts/240602_2dgs/post.html)
