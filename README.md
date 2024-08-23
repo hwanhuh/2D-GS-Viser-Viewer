@@ -120,4 +120,4 @@ This project is built upon the following works
 - [Viser](https://github.com/nerfstudio-project/viser)
 - [Gaussian Splatting Pytorch Lightning](https://github.com/yzslab/gaussian-splatting-lightning).
 
-Related Blog Post: [Review of 2D Gaussian Splatting](https://hwan-h-heo.github.io/hwan-h-heo.io/blogs/posts/240602_2dgs/post.html)
+Related Blog Post: [Review of 2D Gaussian Splatting](https://hwan-h-heo.github.io/hwan-h-heo.io/blogs/posts/240602_2dgs/)
